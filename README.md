@@ -66,7 +66,7 @@ If the FTP account is locked to the gateway folder (e.g. `public_html/razorpay`)
 
 | Name | Type | Value |
 |---|---|---|
-| `FTP_HOST` | variable | FTP server hostname. On shared hosting, use the server's own hostname from cPanel (e.g. `server123.examplehost.com`), not `ftp.yourdomain.com` (see below) |
+| `FTP_HOST` | secret | FTP server hostname. On shared hosting, use the server's own hostname from cPanel (e.g. `server123.examplehost.com`), not `ftp.yourdomain.com` (see below) |
 | `FTP_PORT` | variable | `21` |
 | `FTP_REMOTE_PATH` | variable | `/` (the FTP account's root) |
 | `FTP_SSL_VERIFY` | variable | optional, default `true`; set to `false` only as a last resort, since it skips checking the server's identity |
