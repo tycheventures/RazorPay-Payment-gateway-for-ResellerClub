@@ -1,15 +1,15 @@
 name: Deploy
 
-# Uploads code/ (filtered by .distignore) to the server set in the FTP_* repo variables
+# Uploads code/ (filtered by .distignore) to the server set in the FTP_* repo settings
 # over explicit FTPS (FTP with TLS forced) after each successful release on main.
 #
 # Automatic deploys only run while the repo variable DEPLOY_ENABLED is 'true'.
 # A manual run always checks the connection; it uploads only when
 # DEPLOY_ENABLED is 'true' and the "deploy" input is ticked.
 #
-# Repo variables: DEPLOY_ENABLED, FTP_HOST, FTP_PORT, FTP_REMOTE_PATH,
+# Repo variables: DEPLOY_ENABLED, FTP_PORT, FTP_REMOTE_PATH,
 #                 FTP_SSL_VERIFY (optional, default 'true')
-# Repo secrets:   FTP_USERNAME, FTP_PASSWORD
+# Repo secrets:   FTP_HOST, FTP_USERNAME, FTP_PASSWORD (masked in the public logs)
 #
 # Uploads never delete remote files, so config.php and data/ on the server
 # are left alone.
@@ -38,7 +38,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  FTP_HOST: ${{ vars.FTP_HOST }}
+  FTP_HOST: ${{ secrets.FTP_HOST }}
   FTP_PORT: ${{ vars.FTP_PORT || '21' }}
   FTP_REMOTE_PATH: ${{ vars.FTP_REMOTE_PATH || '/' }}
   FTP_SSL_VERIFY: ${{ vars.FTP_SSL_VERIFY || 'true' }}
