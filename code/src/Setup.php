@@ -11,7 +11,9 @@ final class Setup
     private const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
     public const FIELDS = [
-        'rc_key', 'razorpay_key_id', 'razorpay_key_secret', 'razorpay_webhook_secret',
+        'rc_key', 'razorpay_live_key_id', 'razorpay_live_key_secret',
+        'sandbox', 'razorpay_test_key_id', 'razorpay_test_key_secret', 'test_customer_ids',
+        'razorpay_webhook_secret',
         'currency', 'base_url', 'merchant_name', 'merchant_logo', 'theme_color',
         'support_email', 'support_phone', 'allowed_redirect_hosts',
     ];
@@ -101,11 +103,30 @@ final class Setup
         if ($v['rc_key'] === '' || preg_match('/\s/', $v['rc_key'])) {
             $e['rc_key'] = 'Enter the key shown on the ResellerClub custom payment gateway screen.';
         }
-        if (!preg_match('/^rzp_(test|live)_[A-Za-z0-9]+$/', $v['razorpay_key_id'])) {
-            $e['razorpay_key_id'] = 'Key ID should look like rzp_test_… or rzp_live_….';
+        // Live keys are required unless sandbox mode is on; sandbox mode needs test keys.
+        $sandbox = in_array($v['sandbox'], ['1', 'on', 'yes', 'true'], true);
+        $pairs = [];
+        $liveGiven = $v['razorpay_live_key_id'] !== '' || $v['razorpay_live_key_secret'] !== '';
+        if (!$sandbox || $liveGiven) {
+            $pairs[] = 'live';
         }
-        if ($v['razorpay_key_secret'] === '') {
-            $e['razorpay_key_secret'] = 'Enter the key secret.';
+        if ($sandbox) {
+            $pairs[] = 'test';
+        }
+        foreach ($pairs as $kind) {
+            if (!preg_match("/^rzp_{$kind}_[A-Za-z0-9]+$/", $v["razorpay_{$kind}_key_id"])) {
+                $e["razorpay_{$kind}_key_id"] = "Key ID should start with rzp_{$kind}_.";
+            }
+            if ($v["razorpay_{$kind}_key_secret"] === '') {
+                $e["razorpay_{$kind}_key_secret"] = 'Enter the key secret.';
+            }
+        }
+        $customerIds = array_values(array_unique(array_filter(preg_split('/[\s,]+/', $v['test_customer_ids']), 'strlen')));
+        foreach ($customerIds as $id) {
+            if (!preg_match('/^[0-9]{1,15}$/', $id)) {
+                $e['test_customer_ids'] = "“{$id}” is not a ResellerClub customer ID (digits only).";
+                break;
+            }
         }
         if ($v['razorpay_webhook_secret'] === '') {
             $v['razorpay_webhook_secret'] = bin2hex(random_bytes(20));
@@ -156,17 +177,23 @@ final class Setup
             }
         }
 
-        if (!isset($e['razorpay_key_id']) && !isset($e['razorpay_key_secret'])) {
-            $err = $checkKeys($v['razorpay_key_id'], $v['razorpay_key_secret']);
-            if ($err !== null) {
-                $e['razorpay_key_secret'] = $err;
+        foreach ($pairs as $kind) {
+            if (!isset($e["razorpay_{$kind}_key_id"]) && !isset($e["razorpay_{$kind}_key_secret"])) {
+                $err = $checkKeys($v["razorpay_{$kind}_key_id"], $v["razorpay_{$kind}_key_secret"]);
+                if ($err !== null) {
+                    $e["razorpay_{$kind}_key_secret"] = $err;
+                }
             }
         }
 
         $config = [
             'rc_key'                  => $v['rc_key'],
-            'razorpay_key_id'         => $v['razorpay_key_id'],
-            'razorpay_key_secret'     => $v['razorpay_key_secret'],
+            'mode'                    => $sandbox ? 'test' : 'live',
+            'razorpay_live_key_id'    => in_array('live', $pairs, true) ? $v['razorpay_live_key_id'] : '',
+            'razorpay_live_key_secret' => in_array('live', $pairs, true) ? $v['razorpay_live_key_secret'] : '',
+            'razorpay_test_key_id'    => $sandbox ? $v['razorpay_test_key_id'] : '',
+            'razorpay_test_key_secret' => $sandbox ? $v['razorpay_test_key_secret'] : '',
+            'test_customer_ids'       => $sandbox ? $customerIds : [],
             'razorpay_webhook_secret' => $v['razorpay_webhook_secret'],
             'currency'                => $v['currency'],
             'base_url'                => $v['base_url'],
