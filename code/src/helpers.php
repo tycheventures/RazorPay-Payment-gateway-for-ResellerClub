@@ -225,6 +225,18 @@ function gw_txn_mode(array $txn): string
 }
 
 /**
+ * Amount the payment covers for the order, in paise. When the customer pays
+ * Razorpay's fee (convenience fee / customer fee bearer), Razorpay reports
+ * amount = order amount + fee, so the fee from the API response is taken off.
+ */
+function gw_payment_amount_matches(array $payment, int $expected): bool
+{
+    $amount = (int) ($payment['amount'] ?? 0);
+    $fee = (int) ($payment['fee'] ?? 0);
+    return $amount === $expected || ($fee > 0 && $amount - $fee === $expected);
+}
+
+/**
  * Is $host on the allow-list? Entries are exact hostnames, or "*.example.com"
  * for any subdomain of example.com. An empty list allows every host.
  */

@@ -89,11 +89,11 @@ for ($i = 0; $i < 4; $i++) {
     }
     $compare = [
         'order'    => [$txn['razorpay_order_id'], $payment['order_id'] ?? null],
-        'amount'   => [(int) $txn['amount_minor'], (int) ($payment['amount'] ?? 0)],
+        'amount'   => [(int) $txn['amount_minor'], gw_payment_amount_matches($payment, (int) $txn['amount_minor']) ? (int) $txn['amount_minor'] : (int) ($payment['amount'] ?? 0)],
         'currency' => [strtoupper($txn['currency']), strtoupper((string) ($payment['currency'] ?? ''))],
     ];
     $diff = array_keys(array_filter($compare, fn($pair) => $pair[0] !== $pair[1]));
-    gw_debug('payment fetched', ['try' => $i, 'status' => $payment['status'] ?? null, 'method' => $payment['method'] ?? null, 'expected_vs_got' => $compare, 'mismatch' => $diff]);
+    gw_debug('payment fetched', ['try' => $i, 'status' => $payment['status'] ?? null, 'method' => $payment['method'] ?? null, 'amount_charged' => $payment['amount'] ?? null, 'fee' => $payment['fee'] ?? null, 'expected_vs_got' => $compare, 'mismatch' => $diff]);
     if ($diff) {
         gw_log('Payment does not match order', ['transid' => $txn['rc_transid'], 'payment' => $paymentId, 'mismatch' => $diff, 'expected_vs_got' => array_intersect_key($compare, array_flip($diff))]);
         fail_page('Payment not verified', 'This payment does not match your order. If you were charged, please contact us and quote reference #' . $txn['rc_transid'] . '.');
