@@ -18,6 +18,20 @@ if ($setup->isConfigured()) {
     fail_page('Setup already completed', 'This gateway is already configured. To run setup again, delete config.php on the server and reload this page.', 403);
 }
 
+// Before any setup code exists in data/, make sure data/ can't be downloaded over the web.
+gw_protect_dir(GW_DEFAULT_DATA_DIR);
+$exposed = gw_data_exposed(gw_detect_base_url(), GW_DEFAULT_DATA_DIR);
+if ($exposed === true) {
+    @unlink($setup->codeFile());
+    gw_log('Setup refused: data/ is readable over the web');
+    fail_page('Server not protected', 'The data/ folder in this directory can be downloaded from the web, so setup cannot continue safely. '
+        . 'This server ignores .htaccess files (e.g. nginx, or Apache with AllowOverride None). Block web access to the data/, src/ and bin/ folders '
+        . '(nginx: location ~ /(data|src|bin)/ { deny all; }), then reload this page.', 503);
+}
+$protectionWarning = $exposed === null
+    ? 'Could not confirm that the data/ folder is blocked from the web (this server could not reach itself). Before continuing, open data/setup-code.txt in your browser from this folder\'s URL: it must show "Forbidden" or "Not Found", not the code.'
+    : null;
+
 $setupCodeError = null;
 try {
     $setup->ensureCode();
@@ -151,7 +165,7 @@ $field = function (string $name, string $label, string $help = '', string $type 
     <?php endif; ?>
     <div class="banner <?= $exposed === true ? 'ok' : ($exposed === false ? 'bad' : 'warn') ?>"><?= h($exposureMsg) ?></div>
     <?php if (!$done['allowed_redirect_hosts']): ?>
-      <div class="banner warn">No allowed return hosts set, so any return address is accepted. Add your storefront hostnames to config.php when you can.</div>
+      <div class="banner warn">No extra return hosts set, so customers can only be returned to ResellerClub's own hosts. Add your storefront hostnames to config.php if you need them.</div>
     <?php endif; ?>
   </div>
   <div class="card">
@@ -190,6 +204,7 @@ $field = function (string $name, string $label, string $help = '', string $type 
   <form method="post" autocomplete="off">
     <p class="reqnote"><span class="req">*</span> Required</p>
     <?php if ($setupCodeError): ?><div class="banner bad"><?= h($setupCodeError) ?></div><?php endif; ?>
+    <?php if ($protectionWarning): ?><div class="banner warn"><?= h($protectionWarning) ?></div><?php endif; ?>
     <?php if (isset($errors['_form'])): ?><div class="banner bad"><?= h($errors['_form']) ?></div><?php endif; ?>
     <?php if ($errors && !isset($errors['_form'])): ?><div class="banner bad">Please fix the highlighted fields.</div><?php endif; ?>
 
