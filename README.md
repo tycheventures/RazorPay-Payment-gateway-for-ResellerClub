@@ -89,7 +89,7 @@ Then mark those invoices paid in the ResellerClub control panel. The script exit
 
 ## Releases
 
-Every merge to `main` runs [`.github/workflows/release.yml`](.github/workflows/release.yml). It tags the next version and publishes a GitHub release with `razorpay-resellerclub-gateway-vX.Y.Z.zip`, which unzips to a `razorpay/` folder ready to upload.
+Every merge to `main` that changes `code/` or `.distignore` runs [`.github/workflows/release.yml`](.github/workflows/release.yml). README-only or workflow-only merges make no release and don't deploy. It tags the next version and publishes a GitHub release with `razorpay-resellerclub-gateway-vX.Y.Z.zip`, which unzips to a `razorpay/` folder ready to upload.
 
 - The default is a patch bump (`v1.0.0` → `v1.0.1`).
 - Add the `release:minor` or `release:major` label to the PR before merging to bump those instead.

@@ -1,13 +1,18 @@
 name: Release
 
-# Every merge to main creates the next version tag and a GitHub release with
-# the deployable code/ folder zipped as razorpay/. Patch bump by default; the
-# merged PR's `release:minor` or `release:major` label bumps those instead.
+# A merge to main that changes deployable files (code/ or .distignore) creates
+# the next version tag and a GitHub release with code/ zipped as razorpay/.
+# Docs- or workflow-only merges make no release (and so no deploy).
+# Patch bump by default; the merged PR's `release:minor` or `release:major`
+# label bumps those instead.
 
 on:
   push:
     branches:
       - main
+    paths:
+      - 'code/**'
+      - '.distignore'
 
 permissions:
   contents: write
