@@ -39,11 +39,9 @@ $done = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $posted = array_map(fn($v) => is_string($v) ? $v : '', $_POST);
     $codeOk = $setup->checkCode($posted['setup_code'] ?? '');
-    // Keep what was typed; secrets only come back once the setup code proves who is typing.
-    foreach (Setup::FIELDS as $f) {
-        if ($codeOk || !in_array($f, ['razorpay_key_secret', 'razorpay_webhook_secret', 'rc_key'], true)) {
-            $values[$f] = $posted[$f] ?? '';
-        }
+    // Refill everything that was typed, secrets included: they only go back to the browser that just sent them.
+    foreach (array_merge(['setup_code'], Setup::FIELDS) as $f) {
+        $values[$f] = $posted[$f] ?? '';
     }
 
     if (!$codeOk) {
@@ -100,7 +98,7 @@ $field = function (string $name, string $label, string $help = '', string $type 
         ? '<textarea id="' . $id . '" name="' . $name . '" rows="3"' . $attr . '>' . h($values[$name] ?? '') . '</textarea>'
         : '<input id="' . $id . '" name="' . $name . '" type="' . $type . '" value="' . h($values[$name] ?? '') . '"' . $attr . '>';
     return '<div class="field' . (isset($errors[$name]) ? ' has-error' : '') . '">'
-        . '<label for="' . $id . '">' . h($label) . '</label>' . $input
+        . '<label for="' . $id . '">' . h($label) . (isset($attrs['required']) ? ' <span class="req" aria-hidden="true">*</span>' : '') . '</label>' . $input
         . (isset($errors[$name]) ? '<div class="error">' . h($errors[$name]) . '</div>' : '')
         . ($help !== '' ? '<div class="help">' . $help . '</div>' : '')
         . '</div>';
@@ -124,7 +122,8 @@ $field = function (string $name, string $label, string $help = '', string $type 
   input,textarea{width:100%;padding:10px;border:1px solid #c9ccd1;border-radius:8px;font:inherit}
   input:focus,textarea:focus{outline:2px solid var(--accent);border-color:transparent}
   .help{font-size:13px;color:var(--muted);margin-top:4px} .help code,.muted code{background:#f1f3f4;padding:1px 4px;border-radius:4px}
-  .has-error input,.has-error textarea{border-color:var(--bad)} .error{color:var(--bad);font-size:13px;margin-top:4px}
+  .has-error input,.has-error textarea,input:user-invalid,textarea:user-invalid{border-color:var(--bad)} .error{color:var(--bad);font-size:13px;margin-top:4px}
+  .req{color:var(--bad)} .reqnote{font-size:13px;color:var(--muted);margin:0 0 12px}
   .banner{padding:12px 14px;border-radius:8px;margin-bottom:16px;font-size:14px}
   .banner.bad{background:#fce8e6;color:var(--bad)} .banner.ok{background:#e6f4ea;color:var(--ok)} .banner.warn{background:#fef7e0;color:#8a5a00}
   ul.checks{list-style:none;padding:0;margin:0} ul.checks li{padding:4px 0;font-size:14px}
@@ -182,40 +181,41 @@ $field = function (string $name, string $label, string $help = '', string $type 
     </ul>
   </div>
 
-  <form method="post" autocomplete="off" novalidate>
+  <form method="post" autocomplete="off">
+    <p class="reqnote"><span class="req">*</span> Required</p>
     <?php if ($setupCodeError): ?><div class="banner bad"><?= h($setupCodeError) ?></div><?php endif; ?>
     <?php if (isset($errors['_form'])): ?><div class="banner bad"><?= h($errors['_form']) ?></div><?php endif; ?>
     <?php if ($errors && !isset($errors['_form'])): ?><div class="banner bad">Please fix the highlighted fields.</div><?php endif; ?>
 
     <div class="card">
       <h2>Prove you own this server</h2>
-      <?= $field('setup_code', 'Setup code', 'In cPanel File Manager (or over FTP), open <code>data/setup-code.txt</code> inside this folder and paste the code here.', 'text', ['placeholder' => 'XXXXX-XXXXX-XXXXX-XXXXX-XXXXX', 'spellcheck' => 'false']) ?>
+      <?= $field('setup_code', 'Setup code', 'In cPanel File Manager (or over FTP), open <code>data/setup-code.txt</code> inside this folder and paste the code here.', 'text', ['placeholder' => 'XXXXX-XXXXX-XXXXX-XXXXX-XXXXX', 'spellcheck' => 'false', 'required' => 'required', 'autocapitalize' => 'characters', 'pattern' => '[A-Za-z0-9 \\-]{25,40}', 'title' => '25 letters and digits, e.g. ABCDE-FGHJK-MNPQR-STUVW-XYZ23']) ?>
     </div>
 
     <div class="card">
       <h2>ResellerClub</h2>
-      <?= $field('rc_key', 'Gateway key', 'ResellerClub Control Panel → Settings → Finance &amp; Billing → Payment Gateways → Add Custom Payment Gateway. Copy the key it shows.', 'password') ?>
+      <?= $field('rc_key', 'Gateway key', 'ResellerClub Control Panel → Settings → Finance &amp; Billing → Payment Gateways → Add Custom Payment Gateway. Copy the key it shows.', 'password', ['required' => 'required', 'pattern' => '\\S+', 'title' => 'The key has no spaces']) ?>
     </div>
 
     <div class="card">
       <h2>Razorpay</h2>
-      <?= $field('razorpay_key_id', 'Key ID', 'Razorpay Dashboard → Account &amp; Settings → API Keys. Start with <code>rzp_test_</code> keys.', 'text', ['placeholder' => 'rzp_test_…', 'spellcheck' => 'false']) ?>
-      <?= $field('razorpay_key_secret', 'Key secret', 'Checked against Razorpay before saving.', 'password') ?>
-      <?= $field('razorpay_webhook_secret', 'Webhook secret', 'Leave blank to generate one. You\'ll paste it into Razorpay on the next screen.', 'password') ?>
+      <?= $field('razorpay_key_id', 'Key ID', 'Razorpay Dashboard → Account &amp; Settings → API Keys. Start with <code>rzp_test_</code> keys.', 'text', ['placeholder' => 'rzp_test_…', 'spellcheck' => 'false', 'required' => 'required', 'pattern' => 'rzp_(test|live)_[A-Za-z0-9]+', 'title' => 'Starts with rzp_test_ or rzp_live_']) ?>
+      <?= $field('razorpay_key_secret', 'Key secret', 'Checked against Razorpay before saving.', 'password', ['required' => 'required']) ?>
+      <?= $field('razorpay_webhook_secret', 'Webhook secret', 'Leave blank to generate one. You\'ll paste it into Razorpay on the next screen.', 'password', ['minlength' => '12', 'title' => 'At least 12 characters, or leave blank']) ?>
       <div class="row">
-        <?= $field('currency', 'Currency', 'Must match your ResellerClub selling currency.', 'text', ['maxlength' => '3']) ?>
-        <?= $field('base_url', 'Public URL of this folder', 'Detected automatically. Must be https://.', 'url') ?>
+        <?= $field('currency', 'Currency', 'Must match your ResellerClub selling currency.', 'text', ['maxlength' => '3', 'required' => 'required', 'pattern' => '[A-Za-z]{3}', 'title' => '3-letter code, e.g. INR']) ?>
+        <?= $field('base_url', 'Public URL of this folder', 'Detected automatically. Must be https://.', 'url', ['required' => 'required']) ?>
       </div>
     </div>
 
     <div class="card">
       <h2>Branding</h2>
-      <?= $field('merchant_name', 'Business name', 'Shown on the payment page and in the Razorpay popup.') ?>
-      <?= $field('merchant_logo', 'Logo URL (optional)', 'Square image on https://, at least 256×256. Also used as the browser-tab icon.', 'url', ['placeholder' => 'https://…/logo.png']) ?>
-      <?= $field('theme_color', 'Brand colour', 'Hex colour for buttons and the popup.', 'text', ['placeholder' => '#0b5fff']) ?>
+      <?= $field('merchant_name', 'Business name', 'Shown on the payment page and in the Razorpay popup.', 'text', ['required' => 'required', 'maxlength' => '80']) ?>
+      <?= $field('merchant_logo', 'Logo URL (optional)', 'Square image on https://, at least 256×256. Also used as the browser-tab icon.', 'url', ['placeholder' => 'https://…/logo.png', 'pattern' => 'https://.+', 'title' => 'Must start with https://']) ?>
+      <?= $field('theme_color', 'Brand colour', 'Hex colour for buttons and the popup.', 'text', ['placeholder' => '#0b5fff', 'required' => 'required', 'pattern' => '#[0-9A-Fa-f]{6}', 'title' => 'Hex colour like #0b5fff']) ?>
       <div class="row">
         <?= $field('support_email', 'Support email (optional)', 'Shown to customers on the payment and error pages.', 'email', ['placeholder' => 'support@yourbrand.com']) ?>
-        <?= $field('support_phone', 'Support phone (optional)', 'Shown alongside the email.', 'tel', ['placeholder' => '+91 98765 43210']) ?>
+        <?= $field('support_phone', 'Support phone (optional)', 'Shown alongside the email.', 'tel', ['placeholder' => '+91 98765 43210', 'pattern' => '\\+?[0-9][0-9 \\(\\)\\-]{5,19}', 'title' => 'Digits, spaces, + ( ) - only']) ?>
       </div>
     </div>
 
