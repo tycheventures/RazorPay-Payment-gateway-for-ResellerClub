@@ -1,7 +1,7 @@
 <?php
 /**
  * First-run setup wizard. Only works while config.php does not exist, and only
- * saves when the setup code from data/setup-code.txt is entered.
+ * saves when the setup code from data/setup-code-<random>.txt is entered.
  */
 declare(strict_types=1);
 require __DIR__ . '/src/helpers.php';
@@ -20,16 +20,18 @@ if ($setup->isConfigured()) {
 
 // Before any setup code exists in data/, make sure data/ can't be downloaded over the web.
 gw_protect_dir(GW_DEFAULT_DATA_DIR);
-$exposed = gw_data_exposed(gw_detect_base_url(), GW_DEFAULT_DATA_DIR);
+// The probe is pinned to this server's own address, so a forged Host header can't redirect it.
+$serverAddr = is_string($_SERVER['SERVER_ADDR'] ?? null) ? $_SERVER['SERVER_ADDR'] : null;
+$exposed = gw_data_exposed(gw_detect_base_url(), GW_DEFAULT_DATA_DIR, $serverAddr);
 if ($exposed === true) {
-    @unlink($setup->codeFile());
+    $setup->removeCode();
     gw_log('Setup refused: data/ is readable over the web');
     fail_page('Server not protected', 'The data/ folder in this directory can be downloaded from the web, so setup cannot continue safely. '
         . 'This server ignores .htaccess files (e.g. nginx, or Apache with AllowOverride None). Block web access to the data/, src/ and bin/ folders '
         . '(nginx: location ~ /(data|src|bin)/ { deny all; }), then reload this page.', 503);
 }
 $protectionWarning = $exposed === null
-    ? 'Could not confirm that the data/ folder is blocked from the web (this server could not reach itself). Before continuing, open data/setup-code.txt in your browser from this folder\'s URL: it must show "Forbidden" or "Not Found", not the code.'
+    ? 'Could not confirm that the data/ folder is blocked from the web (this server could not reach itself). Before continuing, open this folder\'s URL followed by /data/.htaccess in your browser: it must show "Forbidden" or "Not Found". The setup code file has a random name, so it can\'t be guessed even if that check fails.'
     : null;
 
 $setupCodeError = null;
@@ -60,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$codeOk) {
         usleep(800000);
-        $errors['setup_code'] = 'That setup code is not correct. Copy it from data/setup-code.txt on the server.';
+        $errors['setup_code'] = 'That setup code is not correct. Copy it from the setup-code-….txt file in data/ on the server.';
         gw_log('Setup: wrong setup code', ['ip' => $_SERVER['REMOTE_ADDR'] ?? '']);
     } elseif (!$envOk) {
         $errors['_form'] = 'Fix the server checks marked ✗ above, then submit again.';
@@ -210,7 +212,7 @@ $field = function (string $name, string $label, string $help = '', string $type 
 
     <div class="card">
       <h2>Prove you own this server</h2>
-      <?= $field('setup_code', 'Setup code', 'In cPanel File Manager (or over FTP), open <code>data/setup-code.txt</code> inside this folder and paste the code here.', 'text', ['placeholder' => 'XXXXX-XXXXX-XXXXX-XXXXX-XXXXX', 'spellcheck' => 'false', 'required' => 'required', 'autocapitalize' => 'characters', 'pattern' => '[A-Za-z0-9 \\-]{25,40}', 'title' => '25 letters and digits, e.g. ABCDE-FGHJK-MNPQR-STUVW-XYZ23']) ?>
+      <?= $field('setup_code', 'Setup code', 'In cPanel File Manager (or over FTP), open the <code>data/</code> folder inside this folder, open the file named <code>setup-code-….txt</code> and paste the code here.', 'text', ['placeholder' => 'XXXXX-XXXXX-XXXXX-XXXXX-XXXXX', 'spellcheck' => 'false', 'required' => 'required', 'autocapitalize' => 'characters', 'pattern' => '[A-Za-z0-9 \\-]{25,40}', 'title' => '25 letters and digits, e.g. ABCDE-FGHJK-MNPQR-STUVW-XYZ23']) ?>
     </div>
 
     <div class="card">

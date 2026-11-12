@@ -72,6 +72,12 @@ jobs:
           for name in FTP_HOST FTP_USERNAME FTP_PASSWORD; do
             if [ -z "${!name}" ]; then echo "::error::$name is not set"; missing=1; fi
           done
+          # These values are interpolated into lftp commands: accept only safe shapes.
+          [[ "$FTP_HOST" =~ ^[A-Za-z0-9.-]+$ ]] || { echo "::error::FTP_HOST must be a plain hostname"; missing=1; }
+          [[ "$FTP_PORT" =~ ^[0-9]{1,5}$ ]] || { echo "::error::FTP_PORT must be a number"; missing=1; }
+          [[ "$FTP_REMOTE_PATH" =~ ^/[A-Za-z0-9._/-]*$ ]] || { echo "::error::FTP_REMOTE_PATH must be an absolute path of letters, digits, . _ - /"; missing=1; }
+          [[ "$FTP_SSL_VERIFY" == "true" || "$FTP_SSL_VERIFY" == "false" ]] || { echo "::error::FTP_SSL_VERIFY must be true or false"; missing=1; }
+          if [ "$FTP_SSL_VERIFY" = "false" ]; then echo "::warning::FTP_SSL_VERIFY=false: the server certificate is not verified"; fi
           exit $missing
 
       - name: Verify connection and destination
@@ -103,6 +109,10 @@ jobs:
           test -f "$stage/pay.php"
           test -f "$stage/.htaccess"
           test ! -e "$stage/config.php"
+          # Allow-list: only PHP files and .htaccess may be uploaded; no symlinks.
+          if find "$stage" -type l | grep -q .; then echo "::error::symlink in upload"; exit 1; fi
+          unexpected=$(find "$stage" -type f ! -name '*.php' ! -name '.htaccess' -print)
+          if [ -n "$unexpected" ]; then echo "::error::unexpected files in upload:"; echo "$unexpected"; exit 1; fi
           find "$stage" -type f -print | sort
 
       - name: Upload files

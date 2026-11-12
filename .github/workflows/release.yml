@@ -52,7 +52,8 @@ jobs:
           elif grep -qx 'release:minor' <<<"$labels"; then bump=minor
           fi
 
-          last=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)
+          # Only strict vMAJOR.MINOR.PATCH tags count; anything else is ignored.
+          last=$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
           if [ -z "$last" ]; then
             next=v1.0.0
           else
@@ -71,16 +72,22 @@ jobs:
       - name: Build release zip
         if: steps.version.outputs.skip == 'false'
         id: build
+        env:
+          NEXT_TAG: ${{ steps.version.outputs.tag }}
         run: |
           set -euo pipefail
 
-          tag="${{ steps.version.outputs.tag }}"
+          tag="$NEXT_TAG"
           stage="$RUNNER_TEMP/stage"
           mkdir -p "$stage/$PACKAGE_DIR_NAME"
 
           rsync --archive --exclude-from='.distignore' code/ "$stage/$PACKAGE_DIR_NAME/"
           test -f "$stage/$PACKAGE_DIR_NAME/pay.php"
           test ! -e "$stage/$PACKAGE_DIR_NAME/config.php"
+          # Allow-list: only PHP files and .htaccess may ship; no symlinks.
+          if find "$stage" -type l | grep -q .; then echo "::error::symlink in package"; exit 1; fi
+          unexpected=$(find "$stage/$PACKAGE_DIR_NAME" -type f ! -name '*.php' ! -name '.htaccess' -print)
+          if [ -n "$unexpected" ]; then echo "::error::unexpected files in package:"; echo "$unexpected"; exit 1; fi
 
           zip_name="razorpay-resellerclub-gateway-${tag}.zip"
           (cd "$stage" && zip -r -q "$GITHUB_WORKSPACE/$zip_name" "$PACKAGE_DIR_NAME")
@@ -89,9 +96,13 @@ jobs:
 
       - name: Create tag and GitHub release
         if: steps.version.outputs.skip == 'false'
+        env:
+          NEXT_TAG: ${{ steps.version.outputs.tag }}
+          ZIP_NAME: ${{ steps.build.outputs.zip }}
         run: |
           set -euo pipefail
-          gh release create "${{ steps.version.outputs.tag }}" "${{ steps.build.outputs.zip }}" \
+          [[ "$NEXT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::bad tag $NEXT_TAG"; exit 1; }
+          gh release create "$NEXT_TAG" "$ZIP_NAME" \
             --target "$GITHUB_SHA" \
-            --title "${{ steps.version.outputs.tag }}" \
+            --title "$NEXT_TAG" \
             --generate-notes

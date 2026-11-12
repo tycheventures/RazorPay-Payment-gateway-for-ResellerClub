@@ -29,8 +29,10 @@ return [
     'debug' => false,
 
     // Razorpay: Dashboard → Webhooks → secret you set for this gateway's webhook URL.
-    // Test mode and Live mode have separate webhooks: use the same URL and secret in both.
-    'razorpay_webhook_secret' => 'CHANGE_ME',
+    // Use a long random value: the webhook refuses to run while this is empty or a
+    // placeholder like CHANGE_ME. Optionally give Razorpay's Test mode its own secret.
+    'razorpay_webhook_secret'      => 'CHANGE_ME',
+    'razorpay_test_webhook_secret' => '', // optional; empty = use the secret above
 
     // Currency your ResellerClub "selling currency" is in. Razorpay charges in this currency.
     'currency' => 'INR',
@@ -40,7 +42,7 @@ return [
 
     // Branding: payment page, error pages and the Razorpay popup.
     'merchant_name' => 'Your Hosting Company',
-    'merchant_logo' => '', // optional https URL to a square logo (also the favicon)
+    'merchant_logo' => '', // optional https URL; square logo or horizontal wordmark (also the favicon)
     'theme_color'   => '#0b5fff',
 
     // Support contact shown on the payment and error pages (optional).
@@ -49,6 +51,9 @@ return [
 
     // Writable directory for the SQLite database and logs. Protected by .htaccess; you may also point this outside the web root.
     'data_dir' => __DIR__ . '/data',
+    // Optional random hex (16–64 chars) added to the database and log file names, so they can't be
+    // fetched by name on a server that ignores .htaccess. The wizard sets one; changing it starts a new database.
+    'data_key' => '',
 
     // Only accept redirect URLs on these hosts (where ResellerClub sends customers back).
     // Exact hostnames, or '*.example.com' for any subdomain. Prevents the gateway being used

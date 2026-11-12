@@ -10,7 +10,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     fail_page('Invalid request', 'This page can only be reached from the payment screen.', 405);
 }
 
-$token = (string) ($_POST['token'] ?? '');
+$token = is_string($_POST['token'] ?? null) ? $_POST['token'] : '';
 $txn = $token !== '' ? $store->findByToken($token) : null;
 if (!$txn) {
     fail_page('Unknown transaction', 'We could not find this payment. If you were charged, please contact us and we will sort it out.', 404);
@@ -21,15 +21,23 @@ if ($txnMode === 'test') {
     gw_debug_enable('test-mode transaction');
 }
 gw_debug('callback received', [
-    'post' => array_intersect_key($_POST, array_flip(['action', 'attempt', 'razorpay_payment_id', 'razorpay_order_id', 'razorpay_signature'])),
+    'action' => $_POST['action'] ?? null,
+    'attempt' => $_POST['attempt'] ?? null,
+    'payment' => $_POST['razorpay_payment_id'] ?? null,
+    'order' => $_POST['razorpay_order_id'] ?? null,
+    'signature_present' => !empty($_POST['razorpay_signature']),
     'txn' => ['transid' => $txn['rc_transid'], 'status' => $txn['status'], 'order' => $txn['razorpay_order_id'], 'amount_minor' => $txn['amount_minor'], 'currency' => $txn['currency'], 'mode' => $txnMode],
 ]);
 
-/** Post the final result to ResellerClub and mark it delivered. */
+/** Post the final result to ResellerClub. A success is only signed inside the test/live boundary. */
 $sendBack = function (array $txn, string $status) use ($rc, $store): never {
-    gw_debug('returning to ResellerClub', ['transid' => $txn['rc_transid'], 'status' => $status, 'redirect' => $txn['redirect_url']]);
+    if ($status === ResellerClub::STATUS_SUCCESS && !gw_may_send_success($txn)) {
+        gw_log('Blocked success outside the test boundary', ['transid' => $txn['rc_transid'], 'mode' => gw_txn_mode($txn)]);
+        fail_page('Payment not confirmed', 'This test payment cannot be confirmed for this order. Please contact us and quote reference #' . $txn['rc_transid'] . '.', 409);
+    }
+    gw_debug('returning to ResellerClub', ['transid' => $txn['rc_transid'], 'status' => $status, 'return_host' => parse_url($txn['redirect_url'], PHP_URL_HOST)]);
     if ($status === ResellerClub::STATUS_SUCCESS) {
-        $store->update($txn['token'], ['rc_notified' => 1]);
+        $store->markResultShown($txn['token']);
     }
     gw_log('Returning to ResellerClub', ['transid' => $txn['rc_transid'], 'status' => $status]);
     ResellerClub::renderRedirect(
@@ -42,7 +50,7 @@ $sendBack = function (array $txn, string $status) use ($rc, $store): never {
 if ($txn['status'] === 'paid') {
     $sendBack($txn, ResellerClub::STATUS_SUCCESS);
 }
-if ($txn['status'] === 'failed') {
+if ($txn['status'] === 'failed' || $txn['status'] === 'superseded') {
     $sendBack($txn, ResellerClub::STATUS_FAILED);
 }
 
@@ -62,14 +70,14 @@ try {
     fail_page('Payment not confirmed', 'We could not confirm this payment right now. If you were charged, please contact us and quote reference #' . $txn['rc_transid'] . '.', 503);
 }
 
-$paymentId = (string) ($_POST['razorpay_payment_id'] ?? '');
-$orderId   = (string) ($_POST['razorpay_order_id'] ?? '');
-$signature = (string) ($_POST['razorpay_signature'] ?? '');
+$paymentId = is_string($_POST['razorpay_payment_id'] ?? null) ? $_POST['razorpay_payment_id'] : '';
+$orderId   = is_string($_POST['razorpay_order_id'] ?? null) ? $_POST['razorpay_order_id'] : '';
+$signature = is_string($_POST['razorpay_signature'] ?? null) ? $_POST['razorpay_signature'] : '';
 
 $sigOk = $paymentId !== '' && $orderId === $txn['razorpay_order_id'] && $razorpay->verifyPaymentSignature($orderId, $paymentId, $signature);
-gw_debug('signature check', ['ok' => $sigOk, 'order_posted' => $orderId, 'order_expected' => $txn['razorpay_order_id'], 'payment' => $paymentId]);
+gw_debug('signature check', ['ok' => $sigOk, 'order_matches' => $orderId === $txn['razorpay_order_id'], 'payment' => $paymentId]);
 if (!$sigOk) {
-    gw_log('Signature verification failed', ['transid' => $txn['rc_transid'], 'order' => $orderId, 'payment' => $paymentId]);
+    gw_log('Signature verification failed', ['transid' => $txn['rc_transid'], 'payment' => substr($paymentId, 0, 40)]);
     fail_page('Payment not verified', 'We could not verify this payment. If you were charged, please contact us and quote reference #' . $txn['rc_transid'] . '.');
 }
 
@@ -87,22 +95,16 @@ for ($i = 0; $i < 4; $i++) {
         gw_log('Payment fetch failed', ['transid' => $txn['rc_transid'], 'payment' => $paymentId, 'try' => $i, 'error' => $e->getMessage()]);
         continue;
     }
-    $compare = [
-        'order'    => [$txn['razorpay_order_id'], $payment['order_id'] ?? null],
-        'amount'   => [(int) $txn['amount_minor'], gw_payment_amount_matches($payment, (int) $txn['amount_minor']) ? (int) $txn['amount_minor'] : (int) ($payment['amount'] ?? 0)],
-        'currency' => [strtoupper($txn['currency']), strtoupper((string) ($payment['currency'] ?? ''))],
-    ];
-    $diff = array_keys(array_filter($compare, fn($pair) => $pair[0] !== $pair[1]));
-    gw_debug('payment fetched', ['try' => $i, 'status' => $payment['status'] ?? null, 'method' => $payment['method'] ?? null, 'amount_charged' => $payment['amount'] ?? null, 'fee' => $payment['fee'] ?? null, 'expected_vs_got' => $compare, 'mismatch' => $diff]);
+    $diff = gw_payment_mismatch($payment, $txn);
+    gw_debug('payment fetched', ['try' => $i, 'status' => $payment['status'] ?? null, 'method' => $payment['method'] ?? null, 'amount_charged' => $payment['amount'] ?? null, 'fee' => $payment['fee'] ?? null, 'mismatch' => $diff]);
     if ($diff) {
-        gw_log('Payment does not match order', ['transid' => $txn['rc_transid'], 'payment' => $paymentId, 'mismatch' => $diff, 'expected_vs_got' => array_intersect_key($compare, array_flip($diff))]);
+        gw_log('Payment does not match order', ['transid' => $txn['rc_transid'], 'payment' => $paymentId, 'mismatch' => array_keys($diff), 'expected_vs_got' => $diff]);
         fail_page('Payment not verified', 'This payment does not match your order. If you were charged, please contact us and quote reference #' . $txn['rc_transid'] . '.');
     }
     $lastStatus = (string) ($payment['status'] ?? '');
 
     if ($lastStatus === 'captured') {
-        $store->transition($token, 'created', 'paid', ['razorpay_payment_id' => $paymentId]);
-        $store->transition($token, 'failed', 'paid', ['razorpay_payment_id' => $paymentId]);
+        $store->markPaid($token, $paymentId);
         $sendBack($store->findByToken($token), ResellerClub::STATUS_SUCCESS);
     }
     if ($lastStatus === 'failed') {
@@ -113,7 +115,8 @@ for ($i = 0; $i < 4; $i++) {
     }
     if ($lastStatus === 'authorized') {
         try {
-            $razorpay->capturePayment($paymentId, (int) $txn['amount_minor'], $txn['currency']);
+            // Capture the authorised amount (includes Razorpay's fee when the customer pays it).
+            $razorpay->capturePayment($paymentId, (int) $payment['amount'], (string) $payment['currency']);
         } catch (Throwable $e) {
             // Usually "already captured" because auto-capture got there first; the next fetch tells.
             gw_log('Capture call failed', ['transid' => $txn['rc_transid'], 'payment' => $paymentId, 'error' => $e->getMessage()]);

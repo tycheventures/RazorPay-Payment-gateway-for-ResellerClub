@@ -28,5 +28,5 @@ if ($config['debug']) {
     gw_debug_enable('sandbox (test) mode');
 }
 
-$store = new Store($config['data_dir'] . '/transactions.sqlite');
+$store = new Store(gw_data_file('transactions.sqlite'));
 $rc = new ResellerClub($config['rc_key']);
