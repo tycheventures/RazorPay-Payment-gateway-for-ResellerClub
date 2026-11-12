@@ -40,6 +40,57 @@ function gw_log(string $message, array $context = []): void
     @file_put_contents($dir . '/gateway.log', $line . PHP_EOL, FILE_APPEND | LOCK_EX);
 }
 
+/*
+ * Step-by-step debug log (data/debug.log). Lines are buffered from the start of
+ * the request and written once debug is switched on, so early steps are kept too.
+ * On for test-mode transactions, and for everything when config 'debug' is true.
+ */
+function gw_debug(string $step, array $ctx = []): void
+{
+    $d = &$GLOBALS['gw_dbg'];
+    $d ??= ['on' => false, 'buf' => [], 'rid' => bin2hex(random_bytes(3)), 'why' => ''];
+    $line = '[' . date('c') . '] ' . $d['rid'] . ' ' . basename($_SERVER['SCRIPT_NAME'] ?? 'cli') . ' | ' . $step;
+    if ($ctx) {
+        $line .= ' ' . json_encode($ctx, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+    }
+    $d['buf'][] = $line;
+    if ($d['on']) {
+        gw_debug_flush();
+    }
+}
+
+function gw_debug_enable(string $why): void
+{
+    $d = &$GLOBALS['gw_dbg'];
+    $d ??= ['on' => false, 'buf' => [], 'rid' => bin2hex(random_bytes(3)), 'why' => ''];
+    if ($d['on']) {
+        return;
+    }
+    $d['on'] = true;
+    $d['why'] = $why;
+    array_unshift($d['buf'], '[' . date('c') . '] ' . $d['rid'] . ' ' . basename($_SERVER['SCRIPT_NAME'] ?? 'cli') . ' | debug on: ' . $why);
+    gw_debug_flush();
+    register_shutdown_function('gw_debug_flush');
+}
+
+function gw_debug_flush(): void
+{
+    $d = &$GLOBALS['gw_dbg'];
+    if (empty($d['on']) || !$d['buf']) {
+        return;
+    }
+    $dir = gw_data_dir();
+    if (!is_dir($dir)) {
+        return;
+    }
+    $file = $dir . '/debug.log';
+    if (is_file($file) && filesize($file) > 5 * 1024 * 1024) {
+        @rename($file, $file . '.1');
+    }
+    @file_put_contents($file, implode(PHP_EOL, $d['buf']) . PHP_EOL, FILE_APPEND | LOCK_EX);
+    $d['buf'] = [];
+}
+
 /** Branding from config.php, with safe defaults when unconfigured or values are invalid. */
 function gw_brand(): array
 {
@@ -137,7 +188,9 @@ function gw_normalize_config(array $c): array
         'razorpay_live_key_id' => '', 'razorpay_live_key_secret' => '',
         'razorpay_test_key_id' => '', 'razorpay_test_key_secret' => '',
         'test_customer_ids' => [],
+        'debug' => false,
     ];
+    $c['debug'] = (bool) $c['debug'];
     $c['mode'] = $c['mode'] === 'test' ? 'test' : 'live';
     $c['test_customer_ids'] = array_values(array_filter(array_map('strval', (array) $c['test_customer_ids']), 'strlen'));
     return $c;

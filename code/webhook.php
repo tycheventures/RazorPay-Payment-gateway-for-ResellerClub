@@ -22,6 +22,11 @@ if (!Razorpay::verifyWebhookSignature($body, $signature, $config['razorpay_webho
 $event = json_decode($body, true);
 $type = $event['event'] ?? '';
 $payment = $event['payload']['payment']['entity'] ?? null;
+$hookTxn = !empty($payment['order_id']) ? $store->findByOrderId($payment['order_id']) : null;
+if ($hookTxn && gw_txn_mode($hookTxn) === 'test') {
+    gw_debug_enable('webhook for a test-mode transaction');
+}
+gw_debug('webhook received', ['event' => $type, 'payment' => $payment['id'] ?? null, 'order' => $payment['order_id'] ?? null, 'status' => $payment['status'] ?? null, 'amount' => $payment['amount'] ?? null, 'txn' => $hookTxn ? ['transid' => $hookTxn['rc_transid'], 'status' => $hookTxn['status']] : null]);
 
 if (in_array($type, ['payment.captured', 'order.paid'], true) && $payment && !empty($payment['order_id'])) {
     $txn = $store->findByOrderId($payment['order_id']);

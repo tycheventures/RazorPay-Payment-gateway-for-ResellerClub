@@ -24,6 +24,10 @@ return [
         // '123456',
     ],
 
+    // Step-by-step log in data/debug.log. Test-mode transactions are always logged;
+    // true logs live transactions too (includes customer details — switch off when done).
+    'debug' => false,
+
     // Razorpay: Dashboard → Webhooks → secret you set for this gateway's webhook URL.
     // Test mode and Live mode have separate webhooks: use the same URL and secret in both.
     'razorpay_webhook_secret' => 'CHANGE_ME',

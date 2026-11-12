@@ -13,7 +13,7 @@ final class Setup
     public const FIELDS = [
         'rc_key', 'razorpay_live_key_id', 'razorpay_live_key_secret',
         'sandbox', 'razorpay_test_key_id', 'razorpay_test_key_secret', 'test_customer_ids',
-        'razorpay_webhook_secret',
+        'razorpay_webhook_secret', 'debug',
         'currency', 'base_url', 'merchant_name', 'merchant_logo', 'theme_color',
         'support_email', 'support_phone', 'allowed_redirect_hosts',
     ];
@@ -194,6 +194,7 @@ final class Setup
             'razorpay_test_key_id'    => $sandbox ? $v['razorpay_test_key_id'] : '',
             'razorpay_test_key_secret' => $sandbox ? $v['razorpay_test_key_secret'] : '',
             'test_customer_ids'       => $sandbox ? $customerIds : [],
+            'debug'                   => in_array($v['debug'], ['1', 'on', 'yes', 'true'], true),
             'razorpay_webhook_secret' => $v['razorpay_webhook_secret'],
             'currency'                => $v['currency'],
             'base_url'                => $v['base_url'],
