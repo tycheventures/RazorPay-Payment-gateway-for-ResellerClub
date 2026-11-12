@@ -13,7 +13,7 @@ final class Setup
     public const FIELDS = [
         'rc_key', 'razorpay_key_id', 'razorpay_key_secret', 'razorpay_webhook_secret',
         'currency', 'base_url', 'merchant_name', 'merchant_logo', 'theme_color',
-        'allowed_redirect_hosts',
+        'support_email', 'support_phone', 'allowed_redirect_hosts',
     ];
 
     public function __construct(
@@ -93,7 +93,8 @@ final class Setup
     {
         $v = [];
         foreach (self::FIELDS as $f) {
-            $v[$f] = trim((string) ($in[$f] ?? ''));
+            $raw = $in[$f] ?? '';
+            $v[$f] = trim(is_array($raw) ? implode("\n", array_map('strval', $raw)) : (string) $raw);
         }
         $e = [];
 
@@ -137,6 +138,13 @@ final class Setup
             $e['theme_color'] = 'Use a colour like #0b5fff.';
         }
 
+        if ($v['support_email'] !== '' && !filter_var($v['support_email'], FILTER_VALIDATE_EMAIL)) {
+            $e['support_email'] = 'Enter a valid email address, or leave it blank.';
+        }
+        if ($v['support_phone'] !== '' && !preg_match('/^\+?[0-9][0-9 ()-]{5,19}$/', $v['support_phone'])) {
+            $e['support_phone'] = 'Enter a phone number like +91 98765 43210, or leave it blank.';
+        }
+
         $hosts = array_values(array_unique(array_filter(array_map(
             fn($h) => strtolower(trim($h)),
             preg_split('/[\s,]+/', $v['allowed_redirect_hosts'])
@@ -165,6 +173,8 @@ final class Setup
             'merchant_name'           => $v['merchant_name'],
             'merchant_logo'           => $v['merchant_logo'],
             'theme_color'             => strtolower($v['theme_color']),
+            'support_email'           => $v['support_email'],
+            'support_phone'           => $v['support_phone'],
             'allowed_redirect_hosts'  => $hosts,
         ];
         return [$e, $config];

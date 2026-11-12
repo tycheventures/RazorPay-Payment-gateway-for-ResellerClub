@@ -211,8 +211,12 @@ $field = function (string $name, string $label, string $help = '', string $type 
     <div class="card">
       <h2>Branding</h2>
       <?= $field('merchant_name', 'Business name', 'Shown on the payment page and in the Razorpay popup.') ?>
-      <?= $field('merchant_logo', 'Logo URL (optional)', 'Square image on https://, at least 256×256.', 'url', ['placeholder' => 'https://…/logo.png']) ?>
+      <?= $field('merchant_logo', 'Logo URL (optional)', 'Square image on https://, at least 256×256. Also used as the browser-tab icon.', 'url', ['placeholder' => 'https://…/logo.png']) ?>
       <?= $field('theme_color', 'Brand colour', 'Hex colour for buttons and the popup.', 'text', ['placeholder' => '#0b5fff']) ?>
+      <div class="row">
+        <?= $field('support_email', 'Support email (optional)', 'Shown to customers on the payment and error pages.', 'email', ['placeholder' => 'support@yourbrand.com']) ?>
+        <?= $field('support_phone', 'Support phone (optional)', 'Shown alongside the email.', 'tel', ['placeholder' => '+91 98765 43210']) ?>
+      </div>
     </div>
 
     <div class="card">
