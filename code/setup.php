@@ -231,7 +231,7 @@ $field = function (string $name, string $label, string $help = '', string $type 
 
     <div class="card">
       <h2>Security</h2>
-      <?= $field('allowed_redirect_hosts', 'Allowed return hosts (recommended)', 'Hostnames of your SuperSite and control panel, one per line, e.g. <code>www.yourbrand.com</code>. Customers can only be returned to these.', 'textarea') ?>
+      <?= $field('allowed_redirect_hosts', 'Allowed return hosts (recommended)', 'Hostnames ResellerClub may send customers back to after paying, one per line: your SuperSite and control panel domains, e.g. <code>www.yourbrand.com</code>, or <code>*.yourbrand.com</code> for every subdomain. ResellerClub\'s return address can be on a different host from your storefront. If a payment shows “Unrecognised return address”, the page names the host to add here or in config.php.', 'textarea') ?>
     </div>
 
     <button type="submit"<?= $envOk ? '' : ' disabled' ?>>Save configuration</button>

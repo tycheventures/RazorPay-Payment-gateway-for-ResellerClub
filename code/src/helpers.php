@@ -118,6 +118,28 @@ function fail_page(string $title, string $message, int $code = 400): never
     exit;
 }
 
+/**
+ * Is $host on the allow-list? Entries are exact hostnames, or "*.example.com"
+ * for any subdomain of example.com. An empty list allows every host.
+ */
+function gw_host_allowed(string $host, array $allowed): bool
+{
+    if (!$allowed) {
+        return true;
+    }
+    $host = strtolower(rtrim($host, '.'));
+    foreach ($allowed as $entry) {
+        $entry = strtolower(trim((string) $entry));
+        if ($entry === $host) {
+            return true;
+        }
+        if (str_starts_with($entry, '*.') && str_ends_with($host, substr($entry, 1)) && strlen($host) > strlen($entry) - 1) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /** Public URL of the code/ folder, worked out from the current request. */
 function gw_detect_base_url(): string
 {
