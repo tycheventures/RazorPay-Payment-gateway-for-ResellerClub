@@ -61,15 +61,17 @@ final class ResellerClub
     /** Render an auto-submitting form that posts the result back to ResellerClub. */
     public static function renderRedirect(string $redirectUrl, array $fields): never
     {
-        header('Cache-Control: no-store');
-        echo '<!doctype html><meta charset="utf-8"><title>Returning to store…</title>'
-            . '<body onload="document.forms[0].submit()" style="font-family:system-ui,sans-serif;text-align:center;margin-top:20vh">'
-            . '<p>Returning you to the store…</p>'
-            . '<form method="post" action="' . h($redirectUrl) . '">';
+        $ok = ($fields['status'] ?? '') === self::STATUS_SUCCESS;
+        gw_page_open($ok ? 'Payment received' : 'Returning to store');
+        echo '<h1>' . ($ok ? 'Payment received' : 'Payment not completed') . '</h1>'
+            . '<div class="spinner"></div>'
+            . '<p class="muted">Returning you to the store… Please don\'t close this window or press Back.</p>'
+            . '<form method="post" action="' . h($redirectUrl) . '" id="rc-return">';
         foreach ($fields as $k => $v) {
             echo '<input type="hidden" name="' . h($k) . '" value="' . h((string) $v) . '">';
         }
-        echo '<noscript><button type="submit">Continue</button></noscript></form></body>';
+        echo '<noscript><button class="pay" type="submit">Continue</button></noscript></form>';
+        gw_page_close('<script>document.getElementById("rc-return").submit();</script>');
         exit;
     }
 }

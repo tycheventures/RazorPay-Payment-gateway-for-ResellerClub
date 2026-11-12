@@ -13,7 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $token = (string) ($_POST['token'] ?? '');
 $txn = $token !== '' ? $store->findByToken($token) : null;
 if (!$txn) {
-    fail_page('Unknown transaction', 'We could not find this payment. If you were charged, please contact support.', 404);
+    fail_page('Unknown transaction', 'We could not find this payment. If you were charged, please contact us and we will sort it out.', 404);
 }
 
 /** Post the final result to ResellerClub and mark it delivered. */
@@ -52,7 +52,7 @@ $signature = (string) ($_POST['razorpay_signature'] ?? '');
 if ($paymentId === '' || $orderId !== $txn['razorpay_order_id']
     || !$razorpay->verifyPaymentSignature($orderId, $paymentId, $signature)) {
     gw_log('Signature verification failed', ['transid' => $txn['rc_transid'], 'order' => $orderId, 'payment' => $paymentId]);
-    fail_page('Payment not verified', 'We could not verify this payment. If you were charged, please contact support with transaction #' . $txn['rc_transid'] . '.');
+    fail_page('Payment not verified', 'We could not verify this payment. If you were charged, please contact us and quote reference #' . $txn['rc_transid'] . '.');
 }
 
 // Double-check with Razorpay's API rather than trusting the browser alone.
@@ -68,7 +68,7 @@ try {
     }
 } catch (Throwable $e) {
     gw_log('Payment check failed', ['transid' => $txn['rc_transid'], 'payment' => $paymentId, 'error' => $e->getMessage()]);
-    fail_page('Payment not confirmed', 'We could not confirm your payment yet. If you were charged, it will be reconciled — please contact support with transaction #' . $txn['rc_transid'] . '.', 502);
+    fail_page('Payment not confirmed', 'We could not confirm your payment yet. If you were charged, it will be matched up — please contact us and quote reference #' . $txn['rc_transid'] . '.', 502);
 }
 
 if (($payment['status'] ?? '') === 'captured') {
