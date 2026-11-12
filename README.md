@@ -1,5 +1,7 @@
 # Razorpay Payment Gateway for ResellerClub
 
+[![Release](https://github.com/tycheventures/RazorPay-Payment-gateway-for-ResellerClub/actions/workflows/release.yml/badge.svg)](https://github.com/tycheventures/RazorPay-Payment-gateway-for-ResellerClub/actions/workflows/release.yml)
+
 A ResellerClub **Custom Payment Gateway** that collects payment through **Razorpay Standard Checkout** (UPI, cards, netbanking, wallets).
 
 Plain PHP 8.1+, no Composer. Needs the `curl`, `pdo_sqlite` and `json` extensions.
