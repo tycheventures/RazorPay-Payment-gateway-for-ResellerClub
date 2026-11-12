@@ -26,10 +26,14 @@ if (!$rc->verifyRequest($p)) {
 
 $redirectHost = parse_url($p['redirecturl'], PHP_URL_HOST);
 $scheme = parse_url($p['redirecturl'], PHP_URL_SCHEME);
-if (!in_array($scheme, ['http', 'https'], true) || !$redirectHost
-    || ($config['allowed_redirect_hosts'] && !in_array(strtolower($redirectHost), array_map('strtolower', $config['allowed_redirect_hosts']), true))) {
+if (!in_array($scheme, ['http', 'https'], true) || !$redirectHost) {
+    gw_log('Invalid redirect URL', ['transid' => $p['transid']]);
+    fail_page('Invalid payment request', 'The return address from the store is not valid. Please go back to the store and try again.');
+}
+if (!gw_host_allowed($redirectHost, $config['allowed_redirect_hosts'])) {
     gw_log('Redirect host not allowed', ['transid' => $p['transid'], 'host' => $redirectHost]);
-    fail_page('Invalid payment request', 'Unrecognised return address.');
+    fail_page('Invalid payment request', 'Unrecognised return address: ' . strtolower($redirectHost) . '. '
+        . 'Site owner: add this host to allowed_redirect_hosts in config.php if it belongs to your ResellerClub store.');
 }
 
 if (!is_numeric($p['sellingcurrencyamount']) || (float) $p['sellingcurrencyamount'] <= 0) {

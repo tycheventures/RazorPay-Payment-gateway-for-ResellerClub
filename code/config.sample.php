@@ -34,8 +34,9 @@ return [
     // Writable directory for the SQLite database and logs. Protected by .htaccess; you may also point this outside the web root.
     'data_dir' => __DIR__ . '/data',
 
-    // Only accept redirect URLs on these hosts (ResellerClub / your SuperSite domains).
-    // Prevents the gateway being used as an open redirect. Leave empty to allow any.
+    // Only accept redirect URLs on these hosts (where ResellerClub sends customers back).
+    // Exact hostnames, or '*.example.com' for any subdomain. Prevents the gateway being used
+    // as an open redirect. Leave empty to allow any. A rejected host is named on the error page.
     'allowed_redirect_hosts' => [
         // 'www.yourbrand.com',
         // 'manage.yourbrand.com',

@@ -150,8 +150,8 @@ final class Setup
             preg_split('/[\s,]+/', $v['allowed_redirect_hosts'])
         ))));
         foreach ($hosts as $h) {
-            if (!preg_match('/^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/', $h)) {
-                $e['allowed_redirect_hosts'] = "“{$h}” is not a valid hostname (no https:// or paths).";
+            if (!preg_match('/^(?=.{1,253}$)(\*\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/', $h)) {
+                $e['allowed_redirect_hosts'] = "“{$h}” is not a valid hostname (no https:// or paths; *.example.com is allowed).";
                 break;
             }
         }
