@@ -27,17 +27,40 @@ function gw_protect_dir(string $dir): void
     }
 }
 
+/**
+ * Path of a runtime file in data/. Installs set up by the wizard get an
+ * unguessable suffix (config 'data_key'), e.g. gateway-3f9c….log, so the files
+ * can't be fetched by name even on a server that ignores .htaccess.
+ */
+function gw_data_file(string $name): string
+{
+    $key = (string) ($GLOBALS['config']['data_key'] ?? '');
+    if ($key !== '' && preg_match('/^[a-f0-9]{16,64}$/', $key)) {
+        $dot = strrpos($name, '.');
+        $name = substr($name, 0, $dot) . '-' . $key . substr($name, $dot);
+    }
+    return gw_data_dir() . '/' . $name;
+}
+
+/** Append to a log file, keeping it under 5 MB (one previous file kept as .1). */
+function gw_append_log(string $file, string $text): void
+{
+    if (is_file($file) && filesize($file) > 5 * 1024 * 1024) {
+        @rename($file, $file . '.1');
+    }
+    @file_put_contents($file, $text, FILE_APPEND | LOCK_EX);
+}
+
 function gw_log(string $message, array $context = []): void
 {
-    $dir = gw_data_dir();
-    if (!is_dir($dir)) {
+    if (!is_dir(gw_data_dir())) {
         return;
     }
     $line = '[' . date('c') . '] ' . $message;
     if ($context) {
         $line .= ' ' . json_encode($context, JSON_UNESCAPED_SLASHES);
     }
-    @file_put_contents($dir . '/gateway.log', $line . PHP_EOL, FILE_APPEND | LOCK_EX);
+    gw_append_log(gw_data_file('gateway.log'), $line . PHP_EOL);
 }
 
 /*
@@ -79,15 +102,10 @@ function gw_debug_flush(): void
     if (empty($d['on']) || !$d['buf']) {
         return;
     }
-    $dir = gw_data_dir();
-    if (!is_dir($dir)) {
+    if (!is_dir(gw_data_dir())) {
         return;
     }
-    $file = $dir . '/debug.log';
-    if (is_file($file) && filesize($file) > 5 * 1024 * 1024) {
-        @rename($file, $file . '.1');
-    }
-    @file_put_contents($file, implode(PHP_EOL, $d['buf']) . PHP_EOL, FILE_APPEND | LOCK_EX);
+    gw_append_log(gw_data_file('debug.log'), implode(PHP_EOL, $d['buf']) . PHP_EOL);
     $d['buf'] = [];
 }
 
@@ -196,6 +214,9 @@ function gw_normalize_config(array $c): array
         'razorpay_test_key_id' => '', 'razorpay_test_key_secret' => '',
         'test_customer_ids' => [],
         'debug' => false,
+        'data_key' => '',
+        'razorpay_webhook_secret' => '',
+        'razorpay_test_webhook_secret' => '',
     ];
     $c['debug'] = (bool) $c['debug'];
     $c['mode'] = $c['mode'] === 'test' ? 'test' : 'live';
@@ -248,7 +269,7 @@ function gw_payment_amount_matches(array $payment, int $expected): bool
  * fetches it through $baseUrl/data/. Returns true (exposed), false (blocked),
  * or null when the server could not reach itself (inconclusive).
  */
-function gw_data_exposed(string $baseUrl, string $dataDir): ?bool
+function gw_data_exposed(string $baseUrl, string $dataDir, ?string $pinIp = null): ?bool
 {
     if (realpath($dataDir) !== realpath(GW_DEFAULT_DATA_DIR)) {
         return false; // data_dir moved outside the web-served folder
@@ -258,8 +279,25 @@ function gw_data_exposed(string $baseUrl, string $dataDir): ?bool
     if (@file_put_contents($dataDir . '/' . $name, $token) === false) {
         return null;
     }
-    $ch = curl_init(rtrim($baseUrl, '/') . '/data/' . $name);
-    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 6, CURLOPT_FOLLOWLOCATION => false]);
+    $url = rtrim($baseUrl, '/') . '/data/' . $name;
+    $host = (string) parse_url($url, PHP_URL_HOST);
+    $scheme = (string) parse_url($url, PHP_URL_SCHEME);
+    if (!in_array($scheme, ['http', 'https'], true) || !gw_valid_hostname($host)) {
+        @unlink($dataDir . '/' . $name);
+        return null;
+    }
+    $ch = curl_init($url);
+    $opts = [
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 6, CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS, CURLOPT_MAXFILESIZE => 4096,
+    ];
+    // Pin the connection to this server's own address, so a forged Host header
+    // can't point the probe at some other machine.
+    if ($pinIp !== null && filter_var($pinIp, FILTER_VALIDATE_IP)) {
+        $port = (int) (parse_url($url, PHP_URL_PORT) ?: ($scheme === 'https' ? 443 : 80));
+        $opts[CURLOPT_RESOLVE] = [$host . ':' . $port . ':' . (str_contains($pinIp, ':') ? '[' . $pinIp . ']' : $pinIp)];
+    }
+    curl_setopt_array($ch, $opts);
     $body = curl_exec($ch);
     $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
@@ -279,7 +317,7 @@ function gw_data_exposed(string $baseUrl, string $dataDir): ?bool
  */
 function gw_data_exposed_cached(string $baseUrl, string $dataDir): ?bool
 {
-    $file = $dataDir . '/protection-check.json';
+    $file = gw_data_file('protection-check.json');
     $cached = is_file($file) ? json_decode((string) @file_get_contents($file), true) : null;
     if (is_array($cached) && array_key_exists('exposed', $cached)) {
         $ttl = $cached['exposed'] === false ? 86400 : 600;
@@ -354,13 +392,151 @@ function gw_host_allowed(string $host, array $allowed): bool
     return false;
 }
 
+function gw_valid_hostname(string $host): bool
+{
+    return (bool) preg_match('/^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/i', $host);
+}
+
+/**
+ * Return URL from ResellerClub, reduced to a canonical https URL on an allowed
+ * host, or null. It isn't covered by the checksum, so it is held to strict rules:
+ * https only, no user:password, no non-standard port.
+ */
+function gw_canonical_return_url(string $url, array $allowed): ?string
+{
+    $u = parse_url($url);
+    if (!is_array($u) || ($u['scheme'] ?? '') !== 'https' || empty($u['host'])
+        || isset($u['user']) || isset($u['pass']) || (isset($u['port']) && (int) $u['port'] !== 443)) {
+        return null;
+    }
+    $host = strtolower($u['host']);
+    if (!gw_valid_hostname($host) || !gw_host_allowed($host, $allowed)) {
+        return null;
+    }
+    return 'https://' . $host . ($u['path'] ?? '/') . (isset($u['query']) ? '?' . $u['query'] : '');
+}
+
+/**
+ * ResellerClub's built-in "Test For Payment" / "Test For Add Fund" request:
+ * a transid containing "test" (checksummed) AND the result going to
+ * ResellerClub's test servlet, so a real invoice can never be routed here.
+ */
+function gw_is_rc_test(string $transid, string $redirectUrl): bool
+{
+    $host = strtolower((string) parse_url($redirectUrl, PHP_URL_HOST));
+    $path = (string) parse_url($redirectUrl, PHP_URL_PATH);
+    return stripos($transid, 'test') !== false
+        && gw_host_allowed($host, ['*.resellerclub.com'])
+        && stripos($path, '/servlet/TestCustomPayment') === 0;
+}
+
+/**
+ * May a success (Y) be sent to ResellerClub for this transaction? Live
+ * transactions always; test-mode ones only for ResellerClub's test servlet or
+ * a listed sandbox account while sandbox mode is on. Checked wherever a Y is signed.
+ */
+function gw_may_send_success(array $txn): bool
+{
+    if (gw_txn_mode($txn) === 'live') {
+        return true;
+    }
+    if (gw_is_rc_test((string) $txn['rc_transid'], (string) $txn['redirect_url'])) {
+        return true;
+    }
+    $c = $GLOBALS['config'];
+    return $c['mode'] === 'test' && in_array((string) ($txn['rc_userid'] ?? ''), $c['test_customer_ids'], true);
+}
+
+/** Fields of a Razorpay payment that don't match the stored transaction (empty = match). */
+function gw_payment_mismatch(array $payment, array $txn): array
+{
+    $diff = [];
+    if (($payment['order_id'] ?? null) !== $txn['razorpay_order_id']) {
+        $diff['order'] = [$txn['razorpay_order_id'], $payment['order_id'] ?? null];
+    }
+    if (!gw_payment_amount_matches($payment, (int) $txn['amount_minor'])) {
+        $diff['amount'] = [(int) $txn['amount_minor'], (int) ($payment['amount'] ?? 0)];
+    }
+    if (strtoupper((string) ($payment['currency'] ?? '')) !== strtoupper((string) $txn['currency'])) {
+        $diff['currency'] = [strtoupper((string) $txn['currency']), strtoupper((string) ($payment['currency'] ?? ''))];
+    }
+    return $diff;
+}
+
+/** Webhook secret for a mode; a separate test secret is optional. */
+function gw_webhook_secret(string $mode): string
+{
+    $c = $GLOBALS['config'];
+    $secret = $mode === 'test' && $c['razorpay_test_webhook_secret'] !== '' ? $c['razorpay_test_webhook_secret'] : $c['razorpay_webhook_secret'];
+    return gw_secret_usable($secret) ? $secret : '';
+}
+
+/** Rejects empty, short and well-known placeholder secrets. */
+function gw_secret_usable(string $secret): bool
+{
+    return strlen($secret) >= 12 && !in_array(strtolower($secret), ['change_me', 'changeme', 'xxxxxxxxxxxx', 'your_secret_here'], true)
+        && !preg_match('/^(x+|change_?me.*)$/i', $secret);
+}
+
+/** Keep only non-personal fields of a Razorpay API response for the debug log. */
+function gw_redact_api(mixed $data): mixed
+{
+    if (!is_array($data)) {
+        return $data;
+    }
+    $keep = ['id', 'entity', 'status', 'amount', 'amount_paid', 'amount_due', 'currency', 'order_id', 'method',
+        'captured', 'fee', 'tax', 'attempts', 'receipt', 'error_code', 'error_description', 'error_reason', 'error', 'description', 'code'];
+    $out = [];
+    foreach ($data as $k => $v) {
+        if (in_array($k, $keep, true)) {
+            $out[$k] = is_array($v) ? gw_redact_api($v) : $v;
+        }
+    }
+    return $out;
+}
+
+/** Minor-unit exponent per ISO 4217 (most currencies use 2). */
+function gw_currency_exponent(string $currency): int
+{
+    $c = strtoupper($currency);
+    if (in_array($c, ['BIF', 'CLP', 'DJF', 'GNF', 'ISK', 'JPY', 'KMF', 'KRW', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF'], true)) {
+        return 0;
+    }
+    return in_array($c, ['BHD', 'IQD', 'JOD', 'KWD', 'LYD', 'OMR', 'TND'], true) ? 3 : 2;
+}
+
+/** Decimal amount string -> integer minor units, without float rounding; null if invalid. */
+function gw_to_minor(string $amount, string $currency): ?int
+{
+    if (!preg_match('/^(\d{1,12})(?:\.(\d+))?$/', trim($amount), $m)) {
+        return null;
+    }
+    $exp = gw_currency_exponent($currency);
+    $frac = $m[2] ?? '';
+    if (strlen(rtrim($frac, '0')) > $exp) {
+        return null; // more precision than the currency has
+    }
+    $minor = (int) ($m[1] . str_pad(substr($frac, 0, $exp), $exp, '0'));
+    return $minor > 0 ? $minor : null;
+}
+
+function gw_format_minor(int $minor, string $currency): string
+{
+    $exp = gw_currency_exponent($currency);
+    return number_format($minor / (10 ** $exp), $exp) . ' ' . strtoupper($currency);
+}
+
 /** Public URL of the code/ folder, worked out from the current request. */
 function gw_detect_base_url(): string
 {
     $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
         || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https'
         || (int) ($_SERVER['SERVER_PORT'] ?? 0) === 443;
-    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    // Host header is client-controlled: accept only "hostname" or "hostname:port".
+    $host = is_string($_SERVER['HTTP_HOST'] ?? null) ? strtolower($_SERVER['HTTP_HOST']) : '';
+    if (!preg_match('/^([a-z0-9.-]{1,253})(:\d{1,5})?$/', $host, $m) || !gw_valid_hostname($m[1])) {
+        $host = 'localhost';
+    }
     $dir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
     return ($https ? 'https' : 'http') . '://' . $host . $dir;
 }

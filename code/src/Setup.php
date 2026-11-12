@@ -29,25 +29,56 @@ final class Setup
         return is_file($this->configFile);
     }
 
+    /**
+     * The setup code file. Its name carries a random suffix (setup-code-<random>.txt), so it
+     * can't be downloaded by guessing the URL even where .htaccess is ignored.
+     * Returns the existing file, or a fresh unused path.
+     */
     public function codeFile(): string
     {
-        return $this->dataDir . '/setup-code.txt';
+        $existing = glob($this->dataDir . '/setup-code-*.txt') ?: [];
+        if ($existing) {
+            sort($existing);
+            return $existing[0];
+        }
+        return $this->dataDir . '/setup-code-' . bin2hex(random_bytes(8)) . '.txt';
     }
 
-    /** Create the setup code if there isn't one yet. */
+    /** Create the setup code if there isn't one yet (exclusive create, so concurrent first visits can't race). */
     public function ensureCode(): void
     {
         gw_protect_dir($this->dataDir);
-        if (is_file($this->codeFile())) {
+        @unlink($this->dataDir . '/setup-code.txt'); // fixed name used by older versions
+        if (glob($this->dataDir . '/setup-code-*.txt')) {
             return;
         }
         $chars = '';
         for ($i = 0; $i < 25; $i++) {
             $chars .= self::CODE_ALPHABET[random_int(0, strlen(self::CODE_ALPHABET) - 1)];
         }
-        $code = implode('-', str_split($chars, 5));
-        file_put_contents($this->codeFile(), $code . PHP_EOL, LOCK_EX);
-        @chmod($this->codeFile(), 0640);
+        $file = $this->codeFile();
+        $old = umask(0027);
+        $fh = @fopen($file, 'x');
+        umask($old);
+        if (!$fh) {
+            throw new RuntimeException('Could not create the setup code file.');
+        }
+        fwrite($fh, implode('-', str_split($chars, 5)) . PHP_EOL);
+        fclose($fh);
+        // If two first visits raced, keep only the first file so there is exactly one code.
+        $all = glob($this->dataDir . '/setup-code-*.txt') ?: [];
+        sort($all);
+        foreach (array_slice($all, 1) as $extra) {
+            @unlink($extra);
+        }
+    }
+
+    /** Remove every setup code file. */
+    public function removeCode(): void
+    {
+        foreach (array_merge(glob($this->dataDir . '/setup-code-*.txt') ?: [], [$this->dataDir . '/setup-code.txt']) as $f) {
+            @unlink($f);
+        }
     }
 
     public function checkCode(string $input): bool
@@ -130,8 +161,8 @@ final class Setup
         }
         if ($v['razorpay_webhook_secret'] === '') {
             $v['razorpay_webhook_secret'] = bin2hex(random_bytes(20));
-        } elseif (strlen($v['razorpay_webhook_secret']) < 12) {
-            $e['razorpay_webhook_secret'] = 'Use at least 12 characters, or leave it blank to generate one.';
+        } elseif (!gw_secret_usable($v['razorpay_webhook_secret'])) {
+            $e['razorpay_webhook_secret'] = 'Use at least 12 characters (not a placeholder like CHANGE_ME), or leave it blank to generate one.';
         }
         $v['currency'] = strtoupper($v['currency'] ?: 'INR');
         if (!preg_match('/^[A-Z]{3}$/', $v['currency'])) {
@@ -195,6 +226,7 @@ final class Setup
             'razorpay_test_key_secret' => $sandbox ? $v['razorpay_test_key_secret'] : '',
             'test_customer_ids'       => $sandbox ? $customerIds : [],
             'debug'                   => in_array($v['debug'], ['1', 'on', 'yes', 'true'], true),
+            'data_key'                => bin2hex(random_bytes(16)),
             'razorpay_webhook_secret' => $v['razorpay_webhook_secret'],
             'currency'                => $v['currency'],
             'base_url'                => $v['base_url'],
@@ -220,29 +252,39 @@ final class Setup
         }
         $php .= "    'data_dir' => __DIR__ . '/data',\n];\n";
 
-        $tmp = $this->configFile . '.' . bin2hex(random_bytes(6)) . '.tmp';
-        if (file_put_contents($tmp, $php, LOCK_EX) === false) {
+        // Temporary file goes in data/ (blocked, and same filesystem for link()).
+        $tmp = $this->dataDir . '/config-' . bin2hex(random_bytes(8)) . '.tmp';
+        $old = umask(0027);
+        $written = file_put_contents($tmp, $php, LOCK_EX);
+        umask($old);
+        if ($written !== strlen($php)) {
+            @unlink($tmp);
             throw new RuntimeException('Could not write a temporary config file.');
         }
-        @chmod($tmp, 0640);
         // link() fails if config.php already exists, so a second submission can't overwrite it.
         if (!@link($tmp, $this->configFile)) {
             if ($this->isConfigured()) {
                 @unlink($tmp);
                 throw new RuntimeException('config.php already exists.');
             }
-            // Filesystems without hard links: fall back to an exclusive create.
+            // Filesystems without hard links: claim the name exclusively, then fill it completely.
+            $old = umask(0027);
             $fh = @fopen($this->configFile, 'x');
+            umask($old);
             if (!$fh) {
                 @unlink($tmp);
                 throw new RuntimeException('Could not create config.php.');
             }
-            fwrite($fh, $php);
+            $ok = fwrite($fh, $php) === strlen($php);
             fclose($fh);
-            @chmod($this->configFile, 0640);
+            if (!$ok) {
+                @unlink($this->configFile);
+                @unlink($tmp);
+                throw new RuntimeException('Could not write config.php completely.');
+            }
         }
         @unlink($tmp);
-        @unlink($this->codeFile());
+        $this->removeCode();
     }
 
     private function export(mixed $val): string

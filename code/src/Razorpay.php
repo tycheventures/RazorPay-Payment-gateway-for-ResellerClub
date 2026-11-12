@@ -10,8 +10,10 @@ final class Razorpay
 
     public function __construct(private string $keyId, private string $keySecret)
     {
-        // GW_RAZORPAY_API is only for local testing against a mock; it can't be set from a web request.
-        $this->api = rtrim(getenv('GW_RAZORPAY_API') ?: self::API, '/');
+        // GW_RAZORPAY_API points the client at a mock for local testing. It is honoured only
+        // under PHP's built-in development server or the CLI, never on a production web server.
+        $override = in_array(PHP_SAPI, ['cli-server', 'cli'], true) ? (string) getenv('GW_RAZORPAY_API') : '';
+        $this->api = rtrim($override !== '' ? $override : self::API, '/');
     }
 
     public function keyId(): string
@@ -95,9 +97,9 @@ final class Razorpay
         if (function_exists('gw_debug')) {
             gw_debug("razorpay {$method} {$path}", [
                 'key'      => $this->keyId,
-                'sent'     => $body,
+                'sent'     => $body !== null ? array_intersect_key($body, array_flip(['amount', 'currency', 'receipt'])) : null,
                 'http'     => $code,
-                'response' => strlen($raw) > 1500 ? substr($raw, 0, 1500) . '…' : $raw,
+                'response' => is_array($data) ? gw_redact_api($data) : substr($raw, 0, 200),
             ]);
         }
         if ($code >= 400 || !is_array($data)) {
