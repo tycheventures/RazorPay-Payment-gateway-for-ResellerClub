@@ -8,7 +8,7 @@
  * (see bin/unreconciled.php) and mark those invoices paid in ResellerClub manually.
  */
 declare(strict_types=1);
-require dirname(__DIR__) . '/src/bootstrap.php';
+require __DIR__ . '/src/bootstrap.php';
 
 $body = file_get_contents('php://input') ?: '';
 $signature = $_SERVER['HTTP_X_RAZORPAY_SIGNATURE'] ?? '';

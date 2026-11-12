@@ -4,7 +4,7 @@
  * ResellerClub sends the customer here with the transaction details + checksum.
  */
 declare(strict_types=1);
-require dirname(__DIR__) . '/src/bootstrap.php';
+require __DIR__ . '/src/bootstrap.php';
 
 $p = [];
 foreach (ResellerClub::INBOUND_FIELDS as $f) {
