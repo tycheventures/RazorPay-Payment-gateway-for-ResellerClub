@@ -1,9 +1,9 @@
-# Only pay.php, callback.php and webhook.php are meant to be reached from the web.
+# Public entry points: index.php, setup.php (first run only), pay.php, callback.php, webhook.php.
 Options -Indexes
-DirectoryIndex pay.php
+DirectoryIndex index.php
 
 # Block config, samples, logs, databases and dotfiles.
-<FilesMatch "^(config(\.sample)?\.php|.*\.(log|sqlite|sqlite-wal|sqlite-shm|md))$|^\.">
+<FilesMatch "^(config(\.sample)?\.php|.*\.(log|sqlite|sqlite-wal|sqlite-shm|md|tmp))$|^\.">
     <IfModule mod_authz_core.c>
         Require all denied
     </IfModule>

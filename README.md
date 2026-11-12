@@ -22,23 +22,17 @@ Razorpay ──webhook──▶ code/webhook.php   (records payments if the cust
 
 ## Setup
 
-1. **Deploy.** Everything that runs on the server lives in `code/`. Upload its contents to the folder you want to serve it from, e.g. `https://pay.example.com/razorpay` (Apache or LiteSpeed). The bundled `.htaccess` files block web access to `src/`, `bin/`, `data/` and `config.php`. Check that `https://pay.example.com/razorpay/config.sample.php` returns 403.
-2. **Configure.** On the server, inside that folder, run `cp config.sample.php config.php` and fill it in:
-   - `rc_key`: the key from ResellerClub's custom gateway screen (step 3).
-   - `razorpay_key_id` / `razorpay_key_secret`: from Razorpay Dashboard → API Keys.
-   - `razorpay_webhook_secret`: the secret you choose in step 4.
-   - `base_url`: the public URL of that folder, e.g. `https://pay.example.com/razorpay`.
-   - `allowed_redirect_hosts`: your SuperSite / control panel hostnames (recommended).
-   - Make sure the web server user can write to `data_dir`.
-3. **ResellerClub.** Control Panel → Settings → Finance & Billing → Payment Gateways → *Add Custom Payment Gateway*:
-   - Gateway URL: `https://pay.example.com/razorpay/pay.php`
-   - Copy the generated **key** into `rc_key`.
-   - Choose who can see it (customers / sub-resellers) and give it a display name such as "Razorpay (UPI / Cards / Netbanking)".
-4. **Razorpay webhook.** Dashboard → Webhooks → Add:
-   - URL: `https://pay.example.com/razorpay/webhook.php`
-   - Secret: the same value as `razorpay_webhook_secret`
-   - Events: `payment.captured`, `order.paid`
-5. **Test** with `rzp_test_` keys: pay an invoice from a test customer account and check that it is marked paid in ResellerClub. Then switch to live keys.
+1. **Deploy.** Everything that runs on the server lives in `code/`. Upload its contents to the folder you want to serve it from, e.g. `https://pay.example.com/razorpay` (Apache or LiteSpeed). The bundled `.htaccess` files block web access to `src/`, `bin/`, `data/` and `config.php`.
+2. **ResellerClub.** Control Panel → Settings → Finance & Billing → Payment Gateways → *Add Custom Payment Gateway*. Set the gateway URL to `https://pay.example.com/razorpay/pay.php`, choose who can see it, and give it a display name such as "Razorpay (UPI / Cards / Netbanking)". Keep the **key** it shows for the next step.
+3. **Run the setup wizard.** Open `https://pay.example.com/razorpay/` and you'll be sent to `setup.php`.
+   - **Setup code:** on first visit, the wizard writes a one-time code to `data/setup-code.txt`. Open that file in cPanel File Manager or over FTP and paste the code into the wizard. This proves you control the server, so nobody who finds the URL first can enter their own Razorpay keys.
+   - **Fill in:** the ResellerClub key, your Razorpay key ID and secret (start with `rzp_test_`), branding, and the hostnames customers may be returned to.
+   - **Before saving,** the wizard checks the PHP version and extensions, the writable folders, and the Razorpay keys (with a live API call). It then writes `config.php`, deletes the setup code, and locks itself.
+   - **The final screen** shows the webhook URL and secret to paste into Razorpay, and checks that `config.php` is blocked from the web.
+4. **Razorpay webhook.** Dashboard → Webhooks → Add the URL and secret from the wizard, with the events `payment.captured` and `order.paid`.
+5. **Test** with `rzp_test_` keys: pay an invoice from a test customer account and check that it shows as paid in ResellerClub. Then switch to live keys by editing `config.php`.
+
+**Reconfiguring:** edit `config.php` directly (see [`code/config.sample.php`](code/config.sample.php) for every option), or delete it and open the folder again. That issues a fresh setup code and reopens the wizard. While `config.php` is missing, customers see a "not available yet" page.
 
 ## Reconciliation
 
@@ -91,11 +85,15 @@ openssl s_client -starttls ftp -connect ftp.yourdomain.com:21 </dev/null 2>/dev/
 
 | Path | Purpose |
 |---|---|
+| `code/index.php` | Sends the owner to the setup wizard until configured; 404 afterwards |
+| `code/setup.php` | First-run setup wizard, locked once `config.php` exists |
 | `code/pay.php` | Entry point ResellerClub redirects to; creates the order and shows checkout |
 | `code/callback.php` | Verifies the payment and posts the result back to ResellerClub |
 | `code/webhook.php` | Razorpay webhook receiver |
 | `code/src/ResellerClub.php` | ResellerClub checksum + response protocol |
 | `code/src/Razorpay.php` | Minimal Razorpay REST client + signature checks |
+| `code/src/Setup.php` | Setup code, validation and safe `config.php` writing |
+| `code/src/helpers.php` | Shared helpers (escaping, logging, error pages) |
 | `code/src/Store.php` | SQLite transaction store |
 | `code/bin/unreconciled.php` | Lists paid-but-not-returned transactions |
 | `code/data/` | SQLite DB and `gateway.log`, created on first run (git-ignored, web-blocked) |
