@@ -22,6 +22,11 @@ if (!is_file(GW_CONFIG_FILE)) {
 $config = gw_normalize_config(require GW_CONFIG_FILE);
 
 gw_protect_dir($config['data_dir']);
+if ($config['debug']) {
+    gw_debug_enable("config 'debug' is on");
+} elseif ($config['mode'] === 'test') {
+    gw_debug_enable('sandbox (test) mode');
+}
 
 $store = new Store($config['data_dir'] . '/transactions.sqlite');
 $rc = new ResellerClub($config['rc_key']);

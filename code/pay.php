@@ -11,6 +11,15 @@ foreach (ResellerClub::INBOUND_FIELDS as $f) {
     $p[$f] = isset($_REQUEST[$f]) ? trim((string) $_REQUEST[$f]) : null;
 }
 
+if (stripos((string) $p['transid'], 'test') !== false) {
+    gw_debug_enable('ResellerClub test transaction');
+}
+gw_debug('request from ResellerClub', [
+    'method' => $_SERVER['REQUEST_METHOD'] ?? '',
+    'fields' => $p,
+    'other_params' => array_values(array_diff(array_keys($_REQUEST), ResellerClub::INBOUND_FIELDS)),
+]);
+
 foreach (['paymenttypeid', 'transid', 'sellingcurrencyamount', 'accountingcurrencyamount', 'redirecturl', 'checksum'] as $required) {
     if ($p[$required] === null || $p[$required] === '') {
         gw_log('Missing parameter', ['field' => $required]);
@@ -19,7 +28,9 @@ foreach (['paymenttypeid', 'transid', 'sellingcurrencyamount', 'accountingcurren
 }
 $p = array_map(fn($v) => $v ?? '', $p);
 
-if (!$rc->verifyRequest($p)) {
+$checksumOk = $rc->verifyRequest($p);
+gw_debug('checksum check', ['ok' => $checksumOk]);
+if (!$checksumOk) {
     gw_log('Checksum mismatch', ['transid' => $p['transid']]);
     fail_page('Invalid payment request', 'The payment request could not be verified. Please go back to the store and try again.');
 }
@@ -30,6 +41,7 @@ if (!in_array($scheme, ['http', 'https'], true) || !$redirectHost) {
     gw_log('Invalid redirect URL', ['transid' => $p['transid']]);
     fail_page('Invalid payment request', 'The return address from the store is not valid. Please go back to the store and try again.');
 }
+gw_debug('return host check', ['host' => $redirectHost, 'allowed' => gw_host_allowed($redirectHost, $config['allowed_redirect_hosts']), 'list' => $config['allowed_redirect_hosts']]);
 if (!gw_host_allowed($redirectHost, $config['allowed_redirect_hosts'])) {
     gw_log('Redirect host not allowed', ['transid' => $p['transid'], 'host' => $redirectHost]);
     fail_page('Invalid payment request', 'Unrecognised return address: ' . strtolower($redirectHost) . '. '
@@ -50,6 +62,7 @@ $isRcTest = stripos($p['transid'], 'test') !== false;
 // Which Razorpay keys to use. In sandbox (test) mode only listed ResellerClub customers may pay,
 // so nobody else can "pay" with public test cards against the live ResellerClub account.
 $mode = $isRcTest ? 'test' : $config['mode'];
+gw_debug('mode decision', ['config_mode' => $config['mode'], 'rc_test' => $isRcTest, 'mode' => $mode, 'userid' => $p['userid'], 'test_customer_ids' => $config['test_customer_ids']]);
 if ($config['mode'] === 'test' && !$isRcTest && !in_array((string) $p['userid'], $config['test_customer_ids'], true)) {
     gw_log('Sandbox: customer not on test list', ['transid' => $p['transid'], 'userid' => $p['userid']]);
     fail_page('Payment temporarily unavailable', 'Online payment is temporarily unavailable. Please try again later or contact us to pay another way.', 503);
@@ -71,6 +84,7 @@ $GLOBALS['gw_test_banner'] = $mode === 'test';
 
 // Reuse an open attempt for the same transaction (page reloads, back button).
 $txn = $store->findOpenByTransId($p['transid']);
+gw_debug('open attempt lookup', ['found' => $txn ? ['token' => substr($txn['token'], 0, 8) . '…', 'order' => $txn['razorpay_order_id'], 'amount_minor' => $txn['amount_minor'], 'mode' => $txn['mode'] ?? null, 'created' => $txn['created_at']] : null, 'amount_minor_now' => $amountMinor]);
 if ($txn && ((int) $txn['amount_minor'] !== $amountMinor || $txn['redirect_url'] !== $p['redirecturl'] || gw_txn_mode($txn) !== $mode)) {
     $txn = null;
 }
@@ -106,6 +120,9 @@ if (!$txn) {
     ]);
     gw_log('Order created', ['transid' => $p['transid'], 'order' => $order['id'], 'amount' => $amountMinor, 'mode' => $mode]);
     $txn = $store->findByToken($token);
+    gw_debug('new attempt stored', ['token' => substr($token, 0, 8) . '…', 'order' => $order['id'], 'amount_minor' => $amountMinor, 'currency' => $currency, 'mode' => $mode]);
+} else {
+    gw_debug('reusing open attempt', ['token' => substr($txn['token'], 0, 8) . '…', 'order' => $txn['razorpay_order_id']]);
 }
 
 $callbackUrl = $config['base_url'] . '/callback.php';
@@ -126,6 +143,7 @@ $displayAmount = number_format($txn['amount_minor'] / 100, 2) . ' ' . $txn['curr
 
 $reference = 'Ref. #' . $txn['rc_transid'];
 
+gw_debug('payment page shown', ['order' => $checkout['order_id'], 'amount' => $checkout['amount'], 'currency' => $checkout['currency'], 'key' => $checkout['key']]);
 gw_page_open('Pay ' . $displayAmount);
 ?>
   <h1><?= h($checkout['description']) ?></h1>

@@ -51,6 +51,21 @@ Test mode shows a **TEST MODE — no real money will be charged** banner. Pay wi
 - **Older configs** with a single `razorpay_key_id` keep working: `rzp_test_` keys mean test mode.
 - **ResellerClub's test buttons:** *Test For Payment* and *Test For Add Fund* on the custom gateway screen send a transid containing "Test" (e.g. `Payment-Test-1`). These **always use the test keys**, even in live mode, and aren't limited by `test_customer_ids`. The transid is covered by ResellerClub's checksum, so customers can't trigger this. Without test keys configured, these show a "Test keys needed" message.
 
+## Debug log
+
+`data/debug.log` records every step of a payment, one line each, with a short request ID that ties together the lines from one request:
+- the ResellerClub request fields and the checksum, return-host and mode decisions;
+- whether an earlier attempt was reused or a new order created;
+- every Razorpay API call (key ID, HTTP status, trimmed response; never the key secret);
+- the callback's signature check and each confirmation attempt, with expected and actual order, amount and currency;
+- webhook events.
+
+**When it's on:**
+- **Test-mode transactions** (sandbox mode and ResellerClub's test buttons) are always logged.
+- **Live transactions** are logged only while `'debug' => true` is set in `config.php` (a checkbox in the wizard). That log then holds payment details, so switch it off when you're done.
+
+Only the known ResellerClub fields are logged: the customer's name, email and address are left out. The file is blocked from the web and rotates at 5 MB (`debug.log.1`). Read it in cPanel File Manager or over FTP. The short `gateway.log` stays as before.
+
 ## Reconciliation
 
 ResellerClub only finds out about a payment when the customer's browser returns to it. If someone pays and then closes the tab, Razorpay still has the money and the webhook records it, but ResellerClub doesn't. List those cases with:

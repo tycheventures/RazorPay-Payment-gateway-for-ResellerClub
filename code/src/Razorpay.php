@@ -86,9 +86,20 @@ final class Razorpay
         curl_close($ch);
 
         if ($raw === false) {
+            if (function_exists('gw_debug')) {
+                gw_debug("razorpay {$method} {$path} transport error", ['error' => $err]);
+            }
             throw new RuntimeException('Razorpay request failed: ' . $err);
         }
         $data = json_decode($raw, true);
+        if (function_exists('gw_debug')) {
+            gw_debug("razorpay {$method} {$path}", [
+                'key'      => $this->keyId,
+                'sent'     => $body,
+                'http'     => $code,
+                'response' => strlen($raw) > 1500 ? substr($raw, 0, 1500) . '…' : $raw,
+            ]);
+        }
         if ($code >= 400 || !is_array($data)) {
             $msg = $data['error']['description'] ?? ('HTTP ' . $code);
             throw new RuntimeException('Razorpay API error: ' . $msg);
