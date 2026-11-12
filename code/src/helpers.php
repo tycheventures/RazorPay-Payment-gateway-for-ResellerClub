@@ -243,13 +243,62 @@ function gw_payment_amount_matches(array $payment, int $expected): bool
     return $amount === $expected || ($fee > 0 && $amount - $fee === $expected);
 }
 
+/**
+ * Is data/ readable over the web? Writes a random probe file into $dataDir and
+ * fetches it through $baseUrl/data/. Returns true (exposed), false (blocked),
+ * or null when the server could not reach itself (inconclusive).
+ */
+function gw_data_exposed(string $baseUrl, string $dataDir): ?bool
+{
+    if (realpath($dataDir) !== realpath(GW_DEFAULT_DATA_DIR)) {
+        return false; // data_dir moved outside the web-served folder
+    }
+    $name = 'probe-' . bin2hex(random_bytes(6)) . '.txt';
+    $token = bin2hex(random_bytes(16));
+    if (@file_put_contents($dataDir . '/' . $name, $token) === false) {
+        return null;
+    }
+    $ch = curl_init(rtrim($baseUrl, '/') . '/data/' . $name);
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 6, CURLOPT_FOLLOWLOCATION => false]);
+    $body = curl_exec($ch);
+    $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    @unlink($dataDir . '/' . $name);
+    if ($body === false || $code === 0) {
+        return null;
+    }
+    if ($code === 200 && trim((string) $body) === $token) {
+        return true;
+    }
+    return in_array($code, [401, 403, 404], true) ? false : null;
+}
+
+/**
+ * Cached version for the payment path: re-checked every 24h when blocked,
+ * every 10 min when exposed or inconclusive.
+ */
+function gw_data_exposed_cached(string $baseUrl, string $dataDir): ?bool
+{
+    $file = $dataDir . '/protection-check.json';
+    $cached = is_file($file) ? json_decode((string) @file_get_contents($file), true) : null;
+    if (is_array($cached) && array_key_exists('exposed', $cached)) {
+        $ttl = $cached['exposed'] === false ? 86400 : 600;
+        if (time() - (int) ($cached['at'] ?? 0) < $ttl) {
+            return $cached['exposed'];
+        }
+    }
+    $exposed = gw_data_exposed($baseUrl, $dataDir);
+    @file_put_contents($file, json_encode(['at' => time(), 'exposed' => $exposed]), LOCK_EX);
+    return $exposed;
+}
+
 /** ResellerClub's own return hosts (test servlet, live payment pages), always allowed. */
 const GW_RC_RETURN_HOSTS = ['*.resellerclub.com', '*.foundationapi.com'];
 
-/** Return-host allow-list: ResellerClub's own hosts plus the configured ones. Empty config list = allow any. */
+/** Return-host allow-list: ResellerClub's own hosts plus the configured ones (never "allow any"). */
 function gw_return_hosts(array $configured): array
 {
-    return $configured ? array_merge(GW_RC_RETURN_HOSTS, $configured) : [];
+    return array_merge(GW_RC_RETURN_HOSTS, $configured);
 }
 
 /**

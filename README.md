@@ -34,6 +34,15 @@ Razorpay ──webhook──▶ code/webhook.php   (records payments if the cust
 4. **Razorpay webhook.** Dashboard → Webhooks → Add the URL and secret from the wizard, with the events `payment.captured` and `order.paid`.
 5. **Test** with `rzp_test_` keys: pay an invoice from a test customer account and check that it shows as paid in ResellerClub. Then switch to live keys by editing `config.php`.
 
+**Servers that ignore `.htaccess`** (nginx, or Apache with `AllowOverride None`) must block the private folders themselves. For nginx:
+
+```nginx
+location ~ /(data|src|bin)/ { deny all; }
+location ~ /config(\.sample)?\.php$ { deny all; }
+```
+
+The wizard checks this before setup: it puts a random file in `data/` and tries to download it over the web. If that works, it refuses to continue and creates no setup code. The payment page re-runs the check once a day (every 10 minutes while there's a problem) and refuses new payments while `data/` is readable. Alternatively, set `data_dir` in `config.php` to a folder outside the web root.
+
 **Reconfiguring:** edit `config.php` directly (see [`code/config.sample.php`](code/config.sample.php) for every option), or delete it and open the folder again. That issues a fresh setup code and reopens the wizard. While `config.php` is missing, customers see a "not available yet" page.
 
 ## Test and live mode

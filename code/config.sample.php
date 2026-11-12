@@ -52,8 +52,9 @@ return [
 
     // Only accept redirect URLs on these hosts (where ResellerClub sends customers back).
     // Exact hostnames, or '*.example.com' for any subdomain. Prevents the gateway being used
-    // as an open redirect. Leave empty to allow any. A rejected host is named on the error page.
-    // ResellerClub's own hosts (*.resellerclub.com, *.foundationapi.com) are always allowed.
+    // as an open redirect. A rejected host is named on the error page.
+    // ResellerClub's own hosts (*.resellerclub.com, *.foundationapi.com) are always allowed;
+    // leave the list empty to allow only those.
     'allowed_redirect_hosts' => [
         // 'www.yourbrand.com',
         // 'manage.yourbrand.com',

@@ -64,6 +64,12 @@ $returnToStore = function () use ($rc, $p): string {
 };
 $currency = $config['currency'];
 
+// Refuse new payments if data/ (database, logs) can be downloaded from the web.
+if (gw_data_exposed_cached($config['base_url'], $config['data_dir']) === true) {
+    gw_log('Payments refused: data/ is readable over the web', ['transid' => $p['transid']]);
+    fail_page('Payment temporarily unavailable', 'Online payment is temporarily unavailable. Please try again later or contact us to pay another way.', 503, $returnToStore());
+}
+
 // ResellerClub's own "Test For Payment" / "Test For Add Fund" buttons send transids such as
 // "Payment-Test-1". The transid is covered by the checksum, so customers can't trigger this.
 // These always run on the Razorpay test keys, even in live mode.
