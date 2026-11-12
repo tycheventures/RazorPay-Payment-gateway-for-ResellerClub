@@ -1,0 +1,14 @@
+# Only pay.php, callback.php and webhook.php are meant to be reached from the web.
+Options -Indexes
+DirectoryIndex pay.php
+
+# Block config, samples, logs, databases and dotfiles.
+<FilesMatch "^(config(\.sample)?\.php|.*\.(log|sqlite|sqlite-wal|sqlite-shm|md))$|^\.">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>

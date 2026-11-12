@@ -15,6 +15,10 @@ $config = require $configFile;
 if (!is_dir($config['data_dir'])) {
     mkdir($config['data_dir'], 0770, true);
 }
+// The data dir may sit inside the web root: make sure it is never served.
+if (!is_file($config['data_dir'] . '/.htaccess')) {
+    file_put_contents($config['data_dir'] . '/.htaccess', "<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n    Order allow,deny\n    Deny from all\n</IfModule>\n");
+}
 
 function gw_log(string $message, array $context = []): void
 {

@@ -4,7 +4,7 @@
  * Verifies the payment with Razorpay, then posts the result back to ResellerClub.
  */
 declare(strict_types=1);
-require dirname(__DIR__) . '/src/bootstrap.php';
+require __DIR__ . '/src/bootstrap.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     fail_page('Invalid request', 'This page can only be reached from the payment screen.', 405);

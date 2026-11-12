@@ -18,5 +18,5 @@ _site/
 Gemfile.lock
 
 # Gateway secrets and runtime data
-/config.php
-/data/
+/code/config.php
+/code/data/
