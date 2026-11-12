@@ -50,6 +50,14 @@ php code/bin/unreconciled.php
 
 Then mark those invoices paid in the ResellerClub control panel. The script exits with code 1 when it finds any, so you can run it from cron and get an email.
 
+## Releases
+
+Every merge to `main` runs [`.github/workflows/release.yml`](.github/workflows/release.yml). It tags the next version and publishes a GitHub release with `razorpay-resellerclub-gateway-vX.Y.Z.zip`, which unzips to a `razorpay/` folder ready to upload.
+
+- The default is a patch bump (`v1.0.0` → `v1.0.1`).
+- Add the `release:minor` or `release:major` label to the PR before merging to bump those instead.
+- The zip holds `code/` filtered by `.distignore`, so it never contains `config.php`, `data/` or docs.
+
 ## Files
 
 | Path | Purpose |
