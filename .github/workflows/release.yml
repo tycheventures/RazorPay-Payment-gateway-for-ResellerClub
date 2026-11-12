@@ -1,0 +1,92 @@
+name: Release
+
+# Every merge to main creates the next version tag and a GitHub release with
+# the deployable code/ folder zipped as razorpay/. Patch bump by default; the
+# merged PR's `release:minor` or `release:major` label bumps those instead.
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PACKAGE_DIR_NAME: razorpay
+
+    steps:
+      - name: Check out main with tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Work out next version
+        id: version
+        run: |
+          set -euo pipefail
+
+          if git tag --points-at "$GITHUB_SHA" | grep -q '^v'; then
+            echo "Commit already released as $(git tag --points-at "$GITHUB_SHA" | grep '^v' | head -1)."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          labels=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --jq '.[0].labels[].name' 2>/dev/null || true)
+          bump=patch
+          if grep -qx 'release:major' <<<"$labels"; then bump=major
+          elif grep -qx 'release:minor' <<<"$labels"; then bump=minor
+          fi
+
+          last=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)
+          if [ -z "$last" ]; then
+            next=v1.0.0
+          else
+            IFS=. read -r major minor patch <<<"${last#v}"
+            case "$bump" in
+              major) next="v$((major + 1)).0.0" ;;
+              minor) next="v${major}.$((minor + 1)).0" ;;
+              patch) next="v${major}.${minor}.$((patch + 1))" ;;
+            esac
+          fi
+
+          echo "Last tag: ${last:-none}, bump: $bump, next: $next"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "tag=$next" >> "$GITHUB_OUTPUT"
+
+      - name: Build release zip
+        if: steps.version.outputs.skip == 'false'
+        id: build
+        run: |
+          set -euo pipefail
+
+          tag="${{ steps.version.outputs.tag }}"
+          stage="$RUNNER_TEMP/stage"
+          mkdir -p "$stage/$PACKAGE_DIR_NAME"
+
+          rsync --archive --exclude-from='.distignore' code/ "$stage/$PACKAGE_DIR_NAME/"
+          test -f "$stage/$PACKAGE_DIR_NAME/pay.php"
+          test ! -e "$stage/$PACKAGE_DIR_NAME/config.php"
+
+          zip_name="razorpay-resellerclub-gateway-${tag}.zip"
+          (cd "$stage" && zip -r -q "$GITHUB_WORKSPACE/$zip_name" "$PACKAGE_DIR_NAME")
+          unzip -l "$zip_name"
+          echo "zip=$zip_name" >> "$GITHUB_OUTPUT"
+
+      - name: Create tag and GitHub release
+        if: steps.version.outputs.skip == 'false'
+        run: |
+          set -euo pipefail
+          gh release create "${{ steps.version.outputs.tag }}" "${{ steps.build.outputs.zip }}" \
+            --target "$GITHUB_SHA" \
+            --title "${{ steps.version.outputs.tag }}" \
+            --generate-notes
