@@ -236,6 +236,15 @@ function gw_payment_amount_matches(array $payment, int $expected): bool
     return $amount === $expected || ($fee > 0 && $amount - $fee === $expected);
 }
 
+/** ResellerClub's own return hosts (test servlet, live payment pages), always allowed. */
+const GW_RC_RETURN_HOSTS = ['*.resellerclub.com', '*.foundationapi.com'];
+
+/** Return-host allow-list: ResellerClub's own hosts plus the configured ones. Empty config list = allow any. */
+function gw_return_hosts(array $configured): array
+{
+    return $configured ? array_merge(GW_RC_RETURN_HOSTS, $configured) : [];
+}
+
 /**
  * Is $host on the allow-list? Entries are exact hostnames, or "*.example.com"
  * for any subdomain of example.com. An empty list allows every host.
