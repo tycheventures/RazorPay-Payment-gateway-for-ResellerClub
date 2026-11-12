@@ -6,8 +6,12 @@ final class Razorpay
 {
     private const API = 'https://api.razorpay.com/v1';
 
+    private string $api;
+
     public function __construct(private string $keyId, private string $keySecret)
     {
+        // GW_RAZORPAY_API is only for local testing against a mock; it can't be set from a web request.
+        $this->api = rtrim(getenv('GW_RAZORPAY_API') ?: self::API, '/');
     }
 
     public function keyId(): string
@@ -65,7 +69,7 @@ final class Razorpay
 
     private function request(string $method, string $path, ?array $body = null): array
     {
-        $ch = curl_init(self::API . $path);
+        $ch = curl_init($this->api . $path);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_USERPWD        => $this->keyId . ':' . $this->keySecret,
