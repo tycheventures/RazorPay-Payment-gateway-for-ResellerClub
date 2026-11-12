@@ -58,6 +58,35 @@ Every merge to `main` runs [`.github/workflows/release.yml`](.github/workflows/r
 - Add the `release:minor` or `release:major` label to the PR before merging to bump those instead.
 - The zip holds `code/` filtered by `.distignore`, so it never contains `config.php`, `data/` or docs.
 
+## Deployment
+
+After each successful release, [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) uploads the `.distignore`-filtered `code/` folder to `https://pay.fenixhost.in/razorpay` over SFTP. Uploads never delete files on the server, so `config.php` and `data/` there are left alone.
+
+**One-time setup** (repo → Settings → Secrets and variables → Actions, or with `gh`):
+
+| Name | Type | Example |
+|---|---|---|
+| `SFTP_HOST` | variable | `pay.fenixhost.in` |
+| `SFTP_PORT` | variable | `22` (the default if unset) |
+| `SFTP_REMOTE_PATH` | variable | absolute path of the `razorpay` folder, e.g. `/home/USER/pay.fenixhost.in/razorpay` |
+| `SFTP_USERNAME` | secret | SFTP user |
+| `SFTP_PASSWORD` | secret | SFTP password |
+| `DEPLOY_ENABLED` | variable | `true` to switch automatic deploys on |
+
+```bash
+gh variable set SFTP_HOST --body "pay.fenixhost.in"
+gh variable set SFTP_REMOTE_PATH --body "/home/USER/pay.fenixhost.in/razorpay"
+gh secret set SFTP_USERNAME
+gh secret set SFTP_PASSWORD
+```
+
+**First deploy**
+1. Actions → *Deploy to pay.fenixhost.in* → *Run workflow* with "deploy" unticked. This only checks the login and the destination's parent folder.
+2. Run `gh variable set DEPLOY_ENABLED --body true`, then run the workflow again with "deploy" ticked, or merge any PR.
+3. On the server, create `config.php` from `config.sample.php` (see Setup).
+
+Until `DEPLOY_ENABLED` is `true`, merges still create releases but deploy nothing.
+
 ## Files
 
 | Path | Purpose |
