@@ -131,6 +131,7 @@ $field = function (string $name, string $label, string $help = '', string $type 
   button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:12px 18px;font-size:16px;cursor:pointer;width:100%}
   .copy{display:flex;gap:8px;align-items:center;margin:6px 0 14px} .copy input{font-family:ui-monospace,monospace;font-size:13px}
   .copy button{width:auto;padding:9px 12px;font-size:14px}
+  ol.steps{margin:0 0 16px;padding-left:20px;font-size:14px} ol.steps li{margin-bottom:8px} ol.steps .copy{margin:6px 0 0}
   .row{display:grid;grid-template-columns:1fr 1fr;gap:12px} @media(max-width:560px){.row{grid-template-columns:1fr}}
 </style>
 </head>
@@ -149,7 +150,7 @@ $field = function (string $name, string $label, string $help = '', string $type 
   </div>
   <div class="card">
     <h2>1. ResellerClub</h2>
-    <p class="muted">Control Panel → Settings → Finance &amp; Billing → Payment Gateways → your custom gateway. Set the gateway URL to:</p>
+    <p class="muted">Double-check that your custom gateway in ResellerClub (Settings → Finance &amp; Billing → Payment Gateways) uses this gateway URL:</p>
     <div class="copy"><input readonly value="<?= h($done['base_url']) ?>/pay.php"><button type="button" onclick="cp(this)">Copy</button></div>
   </div>
   <div class="card">
@@ -165,7 +166,6 @@ $field = function (string $name, string $label, string $help = '', string $type 
     <h2>3. Test</h2>
     <p class="muted">Pay a small invoice from a test customer account and check that it shows as paid in ResellerClub. When you switch to live keys, edit them in config.php.</p>
   </div>
-  <script>function cp(b){var i=b.previousElementSibling;i.select();navigator.clipboard&&navigator.clipboard.writeText(i.value);b.textContent='Copied';setTimeout(function(){b.textContent='Copy'},1500)}</script>
 <?php else: ?>
   <div class="card">
     <h1>Razorpay gateway setup</h1>
@@ -194,7 +194,17 @@ $field = function (string $name, string $label, string $help = '', string $type 
 
     <div class="card">
       <h2>ResellerClub</h2>
-      <?= $field('rc_key', 'Gateway key', 'ResellerClub Control Panel → Settings → Finance &amp; Billing → Payment Gateways → Add Custom Payment Gateway. Copy the key it shows.', 'password', ['required' => 'required', 'pattern' => '\\S+', 'title' => 'The key has no spaces']) ?>
+      <p class="muted">Create the custom payment gateway in ResellerClub first. It gives you the key to enter below.</p>
+      <ol class="steps">
+        <li>Log in to your ResellerClub <strong>Control Panel</strong> and go to <strong>Settings → Finance &amp; Billing → Payment Gateways</strong>.</li>
+        <li>Click <strong>Add Custom Payment Gateway</strong>, or edit your existing one.</li>
+        <li>Set the <strong>Gateway URL</strong> to:
+          <div class="copy"><input id="gw-url" readonly value="<?= h(rtrim($values['base_url'] ?? '', '/')) ?>/pay.php"><button type="button" onclick="cp(this)">Copy</button></div>
+        </li>
+        <li>Give it a display name your customers will see, e.g. <em>Razorpay (UPI / Cards / Netbanking)</em>, choose who can use it, and save.</li>
+        <li>ResellerClub then shows a <strong>key</strong> for this gateway. Copy it and paste it here:</li>
+      </ol>
+      <?= $field('rc_key', 'Gateway key', 'The key from step 5. It ties ResellerClub to this gateway, so keep it private.', 'password', ['required' => 'required', 'pattern' => '\\S+', 'title' => 'The key has no spaces']) ?>
     </div>
 
     <div class="card">
@@ -228,5 +238,13 @@ $field = function (string $name, string $label, string $help = '', string $type 
   </form>
 <?php endif; ?>
 </main>
+<script>
+  function cp(b){var i=b.previousElementSibling;i.select();navigator.clipboard&&navigator.clipboard.writeText(i.value);b.textContent='Copied';setTimeout(function(){b.textContent='Copy'},1500)}
+  (function(){
+    var base=document.getElementById('f_base_url'), gw=document.getElementById('gw-url');
+    if(!base||!gw)return;
+    base.addEventListener('input',function(){gw.value=base.value.trim().replace(/\/+$/,'')+'/pay.php'});
+  })();
+</script>
 </body>
 </html>
