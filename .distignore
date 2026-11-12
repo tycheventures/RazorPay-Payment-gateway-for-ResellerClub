@@ -1,0 +1,31 @@
+# Files under code/ that must never be uploaded to the server or put in a release zip.
+# Patterns are relative to code/ (rsync --exclude-from). .htaccess files are kept on purpose.
+
+# Server-only secrets and runtime data: created on the server, never overwritten by a deploy
+config.php
+data/
+*.log
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Version control and local tooling
+.git
+.gitignore
+.distignore
+.github
+.vscode
+.idea
+.env
+*.swp
+
+# Documentation and development-only files
+README.md
+*.md
+tests
+phpunit.xml.dist
+composer.lock
+
+# Operating system files
+.DS_Store
+Thumbs.db
