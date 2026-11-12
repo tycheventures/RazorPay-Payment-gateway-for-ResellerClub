@@ -49,6 +49,7 @@ Test mode shows a **TEST MODE — no real money will be charged** banner. Pay wi
 - **Going live:** add the live keys and set `'mode' => 'live'`.
 - **Mixing modes:** each transaction remembers which mode created it, so switching modes doesn't break payments already in progress.
 - **Older configs** with a single `razorpay_key_id` keep working: `rzp_test_` keys mean test mode.
+- **ResellerClub's test buttons:** *Test For Payment* and *Test For Add Fund* on the custom gateway screen send a transid containing "Test" (e.g. `Payment-Test-1`). These **always use the test keys**, even in live mode, and aren't limited by `test_customer_ids`. The transid is covered by ResellerClub's checksum, so customers can't trigger this. Without test keys configured, these show a "Test keys needed" message.
 
 ## Reconciliation
 

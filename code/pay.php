@@ -42,18 +42,30 @@ if (!is_numeric($p['sellingcurrencyamount']) || (float) $p['sellingcurrencyamoun
 $amountMinor = (int) round((float) $p['sellingcurrencyamount'] * 100);
 $currency = $config['currency'];
 
+// ResellerClub's own "Test For Payment" / "Test For Add Fund" buttons send transids such as
+// "Payment-Test-1". The transid is covered by the checksum, so customers can't trigger this.
+// These always run on the Razorpay test keys, even in live mode.
+$isRcTest = stripos($p['transid'], 'test') !== false;
+
 // Which Razorpay keys to use. In sandbox (test) mode only listed ResellerClub customers may pay,
 // so nobody else can "pay" with public test cards against the live ResellerClub account.
-$mode = $config['mode'];
-if ($mode === 'test' && !in_array((string) $p['userid'], $config['test_customer_ids'], true)) {
+$mode = $isRcTest ? 'test' : $config['mode'];
+if ($config['mode'] === 'test' && !$isRcTest && !in_array((string) $p['userid'], $config['test_customer_ids'], true)) {
     gw_log('Sandbox: customer not on test list', ['transid' => $p['transid'], 'userid' => $p['userid']]);
     fail_page('Payment temporarily unavailable', 'Online payment is temporarily unavailable. Please try again later or contact us to pay another way.', 503);
 }
 try {
     $razorpay = gw_razorpay($mode);
 } catch (Throwable $e) {
-    gw_log('Missing keys for mode', ['transid' => $p['transid'], 'mode' => $mode]);
+    gw_log('Missing keys for mode', ['transid' => $p['transid'], 'mode' => $mode, 'rc_test' => $isRcTest]);
+    if ($isRcTest) {
+        fail_page('Test keys needed', 'This is a ResellerClub test transaction, which runs on Razorpay test keys. '
+            . 'Site owner: add razorpay_test_key_id and razorpay_test_key_secret (rzp_test_…) to config.php.', 503);
+    }
     fail_page('Payment temporarily unavailable', 'Online payment is temporarily unavailable. Please try again later or contact us to pay another way.', 503);
+}
+if ($isRcTest) {
+    gw_log('ResellerClub test transaction', ['transid' => $p['transid'], 'redirect' => parse_url($p['redirecturl'], PHP_URL_PATH)]);
 }
 $GLOBALS['gw_test_banner'] = $mode === 'test';
 
