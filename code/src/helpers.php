@@ -253,6 +253,37 @@ function gw_return_hosts(array $configured): array
 }
 
 /**
+ * Razorpay checkout prefill from the customer details ResellerClub sends
+ * (name, emailAddr, telNoCc, telNo). These fields are NOT covered by the
+ * checksum, so they are only ever used to save the customer typing.
+ */
+function gw_checkout_prefill(array $req): array
+{
+    $val = function (string $k) use ($req): string {
+        $v = trim(is_string($req[$k] ?? null) ? $req[$k] : '');
+        return strtolower($v) === 'null' ? '' : $v;
+    };
+    $prefill = [];
+    $name = preg_replace('/\s+/', ' ', $val('name'));
+    if ($name !== '') {
+        $prefill['name'] = mb_substr($name, 0, 100);
+    }
+    $email = $val('emailAddr');
+    if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $prefill['email'] = $email;
+    }
+    $cc = preg_replace('/\D/', '', $val('telNoCc'));
+    $tel = preg_replace('/\D/', '', $val('telNo'));
+    if ($tel !== '') {
+        $contact = $cc !== '' ? $cc . $tel : $tel;
+        if (strlen($contact) >= 6 && strlen($contact) <= 15) {
+            $prefill['contact'] = ($cc !== '' ? '+' : '') . $contact;
+        }
+    }
+    return $prefill;
+}
+
+/**
  * Is $host on the allow-list? Entries are exact hostnames, or "*.example.com"
  * for any subdomain of example.com. An empty list allows every host.
  */
