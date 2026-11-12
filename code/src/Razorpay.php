@@ -15,6 +15,12 @@ final class Razorpay
         return $this->keyId;
     }
 
+    /** Throws if the key ID/secret pair is rejected by Razorpay. */
+    public function verifyCredentials(): void
+    {
+        $this->request('GET', '/orders?count=1');
+    }
+
     public function createOrder(int $amountMinor, string $currency, string $receipt, array $notes = []): array
     {
         return $this->request('POST', '/orders', [
