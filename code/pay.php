@@ -86,7 +86,34 @@ $GLOBALS['gw_test_banner'] = $mode === 'test';
 $txn = $store->findOpenByTransId($p['transid']);
 gw_debug('open attempt lookup', ['found' => $txn ? ['token' => substr($txn['token'], 0, 8) . '…', 'order' => $txn['razorpay_order_id'], 'amount_minor' => $txn['amount_minor'], 'mode' => $txn['mode'] ?? null, 'created' => $txn['created_at']] : null, 'amount_minor_now' => $amountMinor]);
 if ($txn && ((int) $txn['amount_minor'] !== $amountMinor || $txn['redirect_url'] !== $p['redirecturl'] || gw_txn_mode($txn) !== $mode)) {
+    gw_debug('not reusing: amount, return URL or mode differs');
     $txn = null;
+}
+// ResellerClub's test buttons send the same transid every run: always start a fresh order.
+if ($txn && $isRcTest) {
+    gw_debug('not reusing: ResellerClub test transaction');
+    $txn = null;
+}
+// Only reuse an order Razorpay still reports as unpaid.
+if ($txn) {
+    try {
+        $existing = $razorpay->fetchOrder($txn['razorpay_order_id']);
+        $orderStatus = (string) ($existing['status'] ?? '');
+    } catch (Throwable $e) {
+        $orderStatus = 'unknown';
+    }
+    gw_debug('open attempt order status', ['order' => $txn['razorpay_order_id'], 'status' => $orderStatus]);
+    if ($orderStatus === 'paid') {
+        // Paid earlier but the customer never made it back: report it instead of charging again.
+        $store->transition($txn['token'], 'created', 'paid');
+        $store->update($txn['token'], ['rc_notified' => 1]);
+        gw_log('Open attempt already paid at Razorpay', ['transid' => $txn['rc_transid'], 'order' => $txn['razorpay_order_id']]);
+        $GLOBALS['gw_test_banner'] = $mode === 'test';
+        ResellerClub::renderRedirect($txn['redirect_url'], $rc->buildResponse($txn['rc_transid'], $txn['selling_amount'], $txn['accounting_amount'], ResellerClub::STATUS_SUCCESS));
+    }
+    if (!in_array($orderStatus, ['created', 'attempted'], true)) {
+        $txn = null;
+    }
 }
 
 if (!$txn) {
