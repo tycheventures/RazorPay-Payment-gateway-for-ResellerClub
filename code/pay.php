@@ -52,6 +52,16 @@ if (!is_numeric($p['sellingcurrencyamount']) || (float) $p['sellingcurrencyamoun
     fail_page('Invalid payment request', 'Invalid amount.');
 }
 $amountMinor = (int) round((float) $p['sellingcurrencyamount'] * 100);
+
+// From here the request is verified, so a refused payment can still send the customer back:
+// post the signed "not paid" result to ResellerClub, like the Cancel button does.
+$returnToStore = function () use ($rc, $p): string {
+    $html = '<form method="post" action="' . h($p['redirecturl']) . '">';
+    foreach ($rc->buildResponse($p['transid'], $p['sellingcurrencyamount'], $p['accountingcurrencyamount'], ResellerClub::STATUS_FAILED) as $k => $v) {
+        $html .= '<input type="hidden" name="' . h($k) . '" value="' . h((string) $v) . '">';
+    }
+    return $html . '<button class="secondary" type="submit">Cancel and return to store</button></form>';
+};
 $currency = $config['currency'];
 
 // ResellerClub's own "Test For Payment" / "Test For Add Fund" buttons send transids such as
@@ -65,7 +75,7 @@ $mode = $isRcTest ? 'test' : $config['mode'];
 gw_debug('mode decision', ['config_mode' => $config['mode'], 'rc_test' => $isRcTest, 'mode' => $mode, 'userid' => $p['userid'], 'test_customer_ids' => $config['test_customer_ids']]);
 if ($config['mode'] === 'test' && !$isRcTest && !in_array((string) $p['userid'], $config['test_customer_ids'], true)) {
     gw_log('Sandbox: customer not on test list', ['transid' => $p['transid'], 'userid' => $p['userid']]);
-    fail_page('Payment temporarily unavailable', 'Online payment is temporarily unavailable. Please try again later or contact us to pay another way.', 503);
+    fail_page('Payment temporarily unavailable', 'Online payment is temporarily unavailable. Please try again later or contact us to pay another way.', 503, $returnToStore());
 }
 try {
     $razorpay = gw_razorpay($mode);
@@ -73,9 +83,9 @@ try {
     gw_log('Missing keys for mode', ['transid' => $p['transid'], 'mode' => $mode, 'rc_test' => $isRcTest]);
     if ($isRcTest) {
         fail_page('Test keys needed', 'This is a ResellerClub test transaction, which runs on Razorpay test keys. '
-            . 'Site owner: add razorpay_test_key_id and razorpay_test_key_secret (rzp_test_…) to config.php.', 503);
+            . 'Site owner: add razorpay_test_key_id and razorpay_test_key_secret (rzp_test_…) to config.php.', 503, $returnToStore());
     }
-    fail_page('Payment temporarily unavailable', 'Online payment is temporarily unavailable. Please try again later or contact us to pay another way.', 503);
+    fail_page('Payment temporarily unavailable', 'Online payment is temporarily unavailable. Please try again later or contact us to pay another way.', 503, $returnToStore());
 }
 if ($isRcTest) {
     gw_log('ResellerClub test transaction', ['transid' => $p['transid'], 'redirect' => parse_url($p['redirecturl'], PHP_URL_PATH)]);
@@ -127,7 +137,7 @@ if (!$txn) {
         ]);
     } catch (Throwable $e) {
         gw_log('Order creation failed', ['transid' => $p['transid'], 'error' => $e->getMessage()]);
-        fail_page('Payment unavailable', 'We could not start the payment right now. Please try again in a few minutes.', 502);
+        fail_page('Payment unavailable', 'We could not start the payment right now. Please try again in a few minutes.', 502, $returnToStore());
     }
     $store->create([
         'token'              => $token,
