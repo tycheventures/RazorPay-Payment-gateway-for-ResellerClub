@@ -22,20 +22,20 @@ Razorpay ──webhook──▶ code/webhook.php   (records payments if the cust
 
 ## Setup
 
-1. **Deploy.** Everything that runs on the server lives in `code/`. Upload its contents to the folder served at `https://pay.fenixhost.in/razorpay` (Apache or LiteSpeed). The bundled `.htaccess` files block web access to `src/`, `bin/`, `data/` and `config.php`. Check that `https://pay.fenixhost.in/razorpay/config.sample.php` returns 403.
+1. **Deploy.** Everything that runs on the server lives in `code/`. Upload its contents to the folder you want to serve it from, e.g. `https://pay.example.com/razorpay` (Apache or LiteSpeed). The bundled `.htaccess` files block web access to `src/`, `bin/`, `data/` and `config.php`. Check that `https://pay.example.com/razorpay/config.sample.php` returns 403.
 2. **Configure.** On the server, inside that folder, run `cp config.sample.php config.php` and fill it in:
    - `rc_key`: the key from ResellerClub's custom gateway screen (step 3).
    - `razorpay_key_id` / `razorpay_key_secret`: from Razorpay Dashboard → API Keys.
    - `razorpay_webhook_secret`: the secret you choose in step 4.
-   - `base_url`: `https://pay.fenixhost.in/razorpay`.
+   - `base_url`: the public URL of that folder, e.g. `https://pay.example.com/razorpay`.
    - `allowed_redirect_hosts`: your SuperSite / control panel hostnames (recommended).
    - Make sure the web server user can write to `data_dir`.
 3. **ResellerClub.** Control Panel → Settings → Finance & Billing → Payment Gateways → *Add Custom Payment Gateway*:
-   - Gateway URL: `https://pay.fenixhost.in/razorpay/pay.php`
+   - Gateway URL: `https://pay.example.com/razorpay/pay.php`
    - Copy the generated **key** into `rc_key`.
    - Choose who can see it (customers / sub-resellers) and give it a display name such as "Razorpay (UPI / Cards / Netbanking)".
 4. **Razorpay webhook.** Dashboard → Webhooks → Add:
-   - URL: `https://pay.fenixhost.in/razorpay/webhook.php`
+   - URL: `https://pay.example.com/razorpay/webhook.php`
    - Secret: the same value as `razorpay_webhook_secret`
    - Events: `payment.captured`, `order.paid`
 5. **Test** with `rzp_test_` keys: pay an invoice from a test customer account and check that it is marked paid in ResellerClub. Then switch to live keys.
@@ -60,26 +60,32 @@ Every merge to `main` runs [`.github/workflows/release.yml`](.github/workflows/r
 
 ## Deployment
 
-After each successful release, [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) uploads the `.distignore`-filtered `code/` folder to `https://pay.fenixhost.in/razorpay` over **explicit FTPS**: FTP on port 21 with TLS forced for both login and data. Uploads never delete files on the server, so `config.php` and `data/` there are left alone.
+After each successful release, [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) uploads the `.distignore`-filtered `code/` folder to your server over **explicit FTPS**: FTP on port 21 with TLS forced for both login and data. Uploads never delete files on the server, so `config.php` and `data/` there are left alone.
 
-The FTP account is locked to `/home1/fenix/public_html/razorpay`, so the remote path is `/`.
+If the FTP account is locked to the gateway folder (e.g. `public_html/razorpay`), the remote path is `/`.
 
 | Name | Type | Value |
 |---|---|---|
-| `FTP_HOST` | variable | `ftp.fenixhost.in` |
+| `FTP_HOST` | variable | FTP server hostname. On shared hosting, use the server's own hostname from cPanel (e.g. `server123.examplehost.com`), not `ftp.yourdomain.com` (see below) |
 | `FTP_PORT` | variable | `21` |
 | `FTP_REMOTE_PATH` | variable | `/` (the FTP account's root) |
-| `FTP_SSL_VERIFY` | variable | optional; set to `false` only if the host's TLS certificate doesn't match `ftp.fenixhost.in` |
+| `FTP_SSL_VERIFY` | variable | optional, default `true`; set to `false` only as a last resort, since it skips checking the server's identity |
 | `FTP_USERNAME` | secret | FTP user |
 | `FTP_PASSWORD` | secret | FTP password (`gh secret set FTP_PASSWORD`) |
 | `DEPLOY_ENABLED` | variable | `true` to switch automatic deploys on |
 
 **First deploy**
-1. Actions → *Deploy to pay.fenixhost.in* → *Run workflow* with "deploy" unticked. This only checks the login.
+1. Actions → the *Deploy* workflow → *Run workflow* with "deploy" unticked. This only checks the login.
 2. Run `gh variable set DEPLOY_ENABLED --body true`, then run the workflow again with "deploy" ticked, or merge any PR.
 3. On the server, create `config.php` from `config.sample.php` (see Setup).
 
 Until `DEPLOY_ENABLED` is `true`, merges still create releases but deploy nothing.
+
+**Certificate error on shared hosting.** If the connection check fails with `certificate common name doesn't match requested host name`, the server is presenting the hosting company's shared certificate (e.g. `*.examplehost.com`) rather than one for your domain. Set `FTP_HOST` to the server hostname shown in cPanel, which that certificate covers, so verification stays on. Check which names the certificate covers with:
+
+```bash
+openssl s_client -starttls ftp -connect ftp.yourdomain.com:21 </dev/null 2>/dev/null | openssl x509 -noout -subject -ext subjectAltName
+```
 
 ## Files
 
