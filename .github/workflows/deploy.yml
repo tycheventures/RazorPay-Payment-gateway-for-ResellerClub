@@ -1,0 +1,120 @@
+name: Deploy to pay.fenixhost.in
+
+# Uploads code/ (filtered by .distignore) to https://pay.fenixhost.in/razorpay
+# over SFTP after each successful release on main.
+#
+# Automatic deploys only run while the repo variable DEPLOY_ENABLED is 'true'.
+# A manual run always checks the connection; it uploads only when
+# DEPLOY_ENABLED is 'true' and the "deploy" input is ticked.
+#
+# Repo variables: DEPLOY_ENABLED, SFTP_HOST, SFTP_PORT, SFTP_REMOTE_PATH
+# Repo secrets:   SFTP_USERNAME, SFTP_PASSWORD
+#
+# Uploads never delete remote files, so config.php and data/ on the server
+# are left alone.
+
+on:
+  workflow_run:
+    workflows:
+      - Release
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Upload files after the connection check (also needs DEPLOY_ENABLED=true).
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  SFTP_HOST: ${{ vars.SFTP_HOST }}
+  SFTP_PORT: ${{ vars.SFTP_PORT || '22' }}
+  SFTP_REMOTE_PATH: ${{ vars.SFTP_REMOTE_PATH }}
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (vars.DEPLOY_ENABLED == 'true' && github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Check out released commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Install SFTP client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes lftp
+
+      - name: Verify settings
+        env:
+          SFTP_USERNAME: ${{ secrets.SFTP_USERNAME }}
+          SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in SFTP_HOST SFTP_REMOTE_PATH SFTP_USERNAME SFTP_PASSWORD; do
+            if [ -z "${!name}" ]; then echo "::error::$name is not set"; missing=1; fi
+          done
+          exit $missing
+
+      - name: Verify connection and destination
+        env:
+          SFTP_USERNAME: ${{ secrets.SFTP_USERNAME }}
+          SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+        run: |
+          set -euo pipefail
+          parent=$(dirname "$SFTP_REMOTE_PATH")
+          lftp -u "$SFTP_USERNAME","$SFTP_PASSWORD" "sftp://${SFTP_HOST}:${SFTP_PORT}" <<EOF
+          set cmd:fail-exit true
+          set net:timeout 30
+          set net:max-retries 2
+          set sftp:auto-confirm yes
+          cd "$parent"
+          cls -1
+          bye
+          EOF
+
+      - name: Stage files
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/razorpay"
+          mkdir -p "$stage"
+          rsync --archive --exclude-from='.distignore' code/ "$stage/"
+          test -f "$stage/pay.php"
+          test -f "$stage/.htaccess"
+          test ! -e "$stage/config.php"
+          find "$stage" -type f -print | sort
+
+      - name: Upload files
+        if: >-
+          vars.DEPLOY_ENABLED == 'true' &&
+          (github.event_name == 'workflow_run' || inputs.deploy == true)
+        env:
+          SFTP_USERNAME: ${{ secrets.SFTP_USERNAME }}
+          SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+        run: |
+          set -euo pipefail
+          lftp -u "$SFTP_USERNAME","$SFTP_PASSWORD" "sftp://${SFTP_HOST}:${SFTP_PORT}" <<EOF
+          set cmd:fail-exit true
+          set net:timeout 30
+          set net:max-retries 2
+          set sftp:auto-confirm yes
+          mkdir -p -f "$SFTP_REMOTE_PATH"
+          mirror --reverse --verbose=1 --no-perms "$RUNNER_TEMP/razorpay" "$SFTP_REMOTE_PATH"
+          bye
+          EOF
