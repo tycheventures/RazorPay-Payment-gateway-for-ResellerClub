@@ -1,6 +1,6 @@
-name: Deploy to pay.fenixhost.in
+name: Deploy
 
-# Uploads code/ (filtered by .distignore) to https://pay.fenixhost.in/razorpay
+# Uploads code/ (filtered by .distignore) to the server set in the FTP_* repo variables
 # over explicit FTPS (FTP with TLS forced) after each successful release on main.
 #
 # Automatic deploys only run while the repo variable DEPLOY_ENABLED is 'true'.

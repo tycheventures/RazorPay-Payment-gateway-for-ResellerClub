@@ -20,7 +20,7 @@ return [
     'currency' => 'INR',
 
     // Public URL of the code/ folder on the server, no trailing slash.
-    'base_url' => 'https://pay.fenixhost.in/razorpay',
+    'base_url' => 'https://pay.example.com/razorpay',
 
     // Branding shown in the Razorpay popup.
     'merchant_name' => 'Your Hosting Company',
