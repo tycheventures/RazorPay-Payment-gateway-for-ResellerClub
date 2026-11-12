@@ -26,7 +26,7 @@ Razorpay ──webhook──▶ code/webhook.php   (records payments if the cust
 2. **ResellerClub.** Control Panel → Settings → Finance & Billing → Payment Gateways → *Add Custom Payment Gateway*. Set the gateway URL to `https://pay.example.com/razorpay/pay.php`, choose who can see it, and give it a display name such as "Razorpay (UPI / Cards / Netbanking)". Keep the **key** it shows for the next step.
 3. **Run the setup wizard.** Open `https://pay.example.com/razorpay/` and you'll be sent to `setup.php`.
    - **Setup code:** on first visit, the wizard writes a one-time code to `data/setup-code.txt`. Open that file in cPanel File Manager or over FTP and paste the code into the wizard. This proves you control the server, so nobody who finds the URL first can enter their own Razorpay keys.
-   - **Fill in:** the ResellerClub key, your Razorpay live keys, or tick *Sandbox mode* and enter test keys and the customer IDs allowed to test, branding (name, logo, colour, support email and phone), and the hostnames customers may be returned to. The branding appears on the payment page, every error page, the "Returning to store" page and the Razorpay popup.
+   - **Fill in:** the ResellerClub key, your Razorpay live keys, or tick *Sandbox mode* and enter test keys and the customer or sub-reseller IDs allowed to test, branding (name, logo, colour, support email and phone), and the hostnames customers may be returned to. The branding appears on the payment page, every error page, the "Returning to store" page and the Razorpay popup.
    - **Before saving,** the wizard checks the PHP version and extensions, the writable folders, and the Razorpay keys (with a live API call). It then writes `config.php`, deletes the setup code, and locks itself.
    - **The final screen** shows the webhook URL and secret to paste into Razorpay, and checks that `config.php` is blocked from the web.
 4. **Razorpay webhook.** Dashboard → Webhooks → Add the URL and secret from the wizard, with the events `payment.captured` and `order.paid`.
@@ -41,11 +41,11 @@ Razorpay ──webhook──▶ code/webhook.php   (records payments if the cust
 | `mode` | Keys used | Who can pay |
 |---|---|---|
 | `live` | `razorpay_live_key_id` / `_secret` | everyone |
-| `test` (sandbox) | `razorpay_test_key_id` / `_secret` | only the ResellerClub customer IDs in `test_customer_ids`; everyone else sees "temporarily unavailable" |
+| `test` (sandbox) | `razorpay_test_key_id` / `_secret` | only the ResellerClub customer or sub-reseller IDs in `test_customer_ids`; everyone else sees "temporarily unavailable" |
 
 Test mode shows a **TEST MODE — no real money will be charged** banner. Pay with Razorpay's test cards or the test UPI ID `success@razorpay`. The customer limit matters because your ResellerClub account is live: without it, anyone could "pay" with a public test card and get a real order marked as paid.
 
-- **Choosing the mode:** the setup wizard asks for live keys, with an optional *Sandbox mode* checkbox that asks for test keys and customer IDs.
+- **Choosing the mode:** the setup wizard asks for live keys, with an optional *Sandbox mode* checkbox that asks for test keys and the customer or sub-reseller IDs allowed to test. The check uses the `userid` ResellerClub sends, which is set for customers and sub-resellers alike.
 - **Going live:** add the live keys and set `'mode' => 'live'`.
 - **Mixing modes:** each transaction remembers which mode created it, so switching modes doesn't break payments already in progress.
 - **Older configs** with a single `razorpay_key_id` keep working: `rzp_test_` keys mean test mode.

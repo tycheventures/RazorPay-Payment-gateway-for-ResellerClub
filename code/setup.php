@@ -146,7 +146,7 @@ $field = function (string $name, string $label, string $help = '', string $type 
       <strong><?= $done['mode'] === 'test' ? 'SANDBOX (TEST)' : 'LIVE' ?></strong>.</p>
     <?php if ($done['mode'] === 'test'): ?>
       <div class="banner warn">Sandbox mode: payments use your Razorpay test keys and no real money moves.
-        <?= $done['test_customer_ids'] ? 'Only these ResellerClub customer IDs can pay: ' . h(implode(', ', $done['test_customer_ids'])) . '.' : 'No test customer IDs are set, so only ResellerClub\'s own test buttons can pay.' ?>
+        <?= $done['test_customer_ids'] ? 'Only these ResellerClub customer / sub-reseller IDs can pay: ' . h(implode(', ', $done['test_customer_ids'])) . '.' : 'No test customer IDs are set, so only ResellerClub\'s own test buttons can pay.' ?>
         Everyone else sees "temporarily unavailable". To go live, add your live keys to config.php and set <code>'mode' => 'live'</code>.</div>
     <?php endif; ?>
     <div class="banner <?= $exposed === true ? 'ok' : ($exposed === false ? 'bad' : 'warn') ?>"><?= h($exposureMsg) ?></div>
@@ -223,12 +223,12 @@ $field = function (string $name, string $label, string $help = '', string $type 
       </div>
       <div class="field check">
         <label><input type="checkbox" name="sandbox" value="1" id="f_sandbox"<?= $sandboxOn ? ' checked' : '' ?>> Sandbox mode (test without real money)</label>
-        <div class="help">Uses your Razorpay <strong>test</strong> keys, and only the ResellerClub customer IDs you list can pay. Everyone else sees "temporarily unavailable", so nobody can get a free order with public test cards. ResellerClub's own <em>Test For Payment</em> / <em>Test For Add Fund</em> buttons always use the test keys, so tick this if you want to use them.</div>
+        <div class="help">Uses your Razorpay <strong>test</strong> keys, and only the ResellerClub customers or sub-resellers whose IDs you list can pay. Everyone else sees "temporarily unavailable", so nobody can get a free order with public test cards. ResellerClub's own <em>Test For Payment</em> / <em>Test For Add Fund</em> buttons always use the test keys, so tick this if you want to use them.</div>
       </div>
       <div id="sandbox-fields"<?= $sandboxOn ? '' : ' hidden' ?>>
         <?= $field('razorpay_test_key_id', 'Test key ID', 'Generated in <strong>Test mode</strong>.', 'text', ['placeholder' => 'rzp_test_…', 'spellcheck' => 'false', 'pattern' => 'rzp_test_[A-Za-z0-9]+', 'title' => 'Starts with rzp_test_', 'data-req' => '1'] + ($sandboxOn ? ['required' => 'required'] : [])) ?>
         <?= $field('razorpay_test_key_secret', 'Test key secret', '', 'password', ['data-req' => '1'] + ($sandboxOn ? ['required' => 'required'] : [])) ?>
-        <?= $field('test_customer_ids', 'Test customer IDs', 'ResellerClub customer IDs allowed to pay while in sandbox mode, separated by commas, e.g. <code>490208</code>. Find them in ResellerClub under Customers. Leave empty to allow only ResellerClub\'s test buttons.', 'text', ['placeholder' => '490208, 123456', 'pattern' => '[0-9, ]*', 'title' => 'Digits separated by commas']) ?>
+        <?= $field('test_customer_ids', 'Test customer / sub-reseller IDs', 'ResellerClub IDs of the customers or sub-resellers allowed to pay while in sandbox mode, separated by commas, e.g. <code>123456, 654321</code>. Find the ID on the account under Customers or Sub-Resellers in your Control Panel. Leave empty to allow only ResellerClub\'s test buttons.', 'text', ['placeholder' => '123456, 654321', 'pattern' => '[0-9, ]*', 'title' => 'Digits separated by commas']) ?>
       </div>
       <?= $field('razorpay_webhook_secret', 'Webhook secret', 'Leave blank to generate one. You\'ll paste it into Razorpay on the next screen.', 'password', ['minlength' => '12', 'title' => 'At least 12 characters, or leave blank']) ?>
       <div class="row">
