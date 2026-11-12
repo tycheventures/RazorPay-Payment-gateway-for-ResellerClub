@@ -176,11 +176,16 @@ $checkout = [
 if (gw_brand()['logo'] !== '') {
     $checkout['image'] = gw_brand()['logo'];
 }
+// Save the customer retyping their details in the popup (still editable there).
+$prefill = gw_checkout_prefill($_REQUEST);
+if ($prefill) {
+    $checkout['prefill'] = $prefill;
+}
 $displayAmount = number_format($txn['amount_minor'] / 100, 2) . ' ' . $txn['currency'];
 
 $reference = 'Ref. #' . $txn['rc_transid'];
 
-gw_debug('payment page shown', ['order' => $checkout['order_id'], 'amount' => $checkout['amount'], 'currency' => $checkout['currency'], 'key' => $checkout['key']]);
+gw_debug('payment page shown', ['order' => $checkout['order_id'], 'amount' => $checkout['amount'], 'currency' => $checkout['currency'], 'key' => $checkout['key'], 'prefilled' => array_keys($prefill)]);
 gw_page_open('Pay ' . $displayAmount);
 ?>
   <h1><?= h($checkout['description']) ?></h1>
