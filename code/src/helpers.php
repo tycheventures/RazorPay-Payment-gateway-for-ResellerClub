@@ -136,22 +136,29 @@ function gw_page_open(string $title, int $code = 200, string $extraHead = ''): v
         . '<style>'
         . ':root{--brand:' . $b['color'] . ';--text:#1d1f23;--muted:#5f6368;--bg:#f5f6f8}'
         . '*{box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);margin:0;line-height:1.45}'
-        . '.wrap{max-width:440px;margin:8vh auto;padding:0 16px}'
-        . '.brand{display:flex;align-items:center;gap:12px;margin-bottom:16px}'
-        . '.brand img{width:44px;height:44px;border-radius:10px;object-fit:contain;background:#fff}'
-        . '.brand span{font-weight:600;font-size:18px}'
-        . '.card{background:#fff;border-radius:12px;padding:24px;box-shadow:0 2px 12px rgba(0,0,0,.08);border-top:4px solid var(--brand)}'
-        . 'h1{font-size:20px;margin:0 0 8px}.muted{color:var(--muted);font-size:14px}'
+        . '.wrap{max-width:560px;margin:7vh auto;padding:0 16px}'
+        . '.brand{display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:24px;min-height:64px}'
+        . '.brand img{height:64px;width:auto;max-width:min(320px,100%);object-fit:contain}'
+        . '.brand.square img{width:64px;border-radius:14px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.08)}'
+        . '.brand span{font-weight:700;font-size:26px;letter-spacing:-.01em}'
+        . '.brand.wide span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}'
+        . '.card{background:#fff;border-radius:16px;padding:32px;box-shadow:0 4px 20px rgba(0,0,0,.08);border-top:5px solid var(--brand)}'
+        . '@media(max-width:480px){.card{padding:24px 20px}.brand img{height:52px}.brand span{font-size:22px}}'
+        . 'h1{font-size:24px;margin:0 0 12px}p{font-size:16px}.muted{color:var(--muted);font-size:14px}'
         . '.amount{font-size:32px;font-weight:600;margin:16px 0 4px}.ref{font-size:13px;color:var(--muted);margin-bottom:20px}'
         . 'button{width:100%;padding:14px;border:0;border-radius:8px;font-size:16px;cursor:pointer}'
         . '.pay{background:var(--brand);color:#fff}.cancel{background:none;color:var(--muted);margin-top:8px;font-size:14px}'
-        . '.support{font-size:14px;margin-top:16px}.support a{color:var(--brand);white-space:nowrap}'
+        . '.secondary{background:#fff;color:var(--text);border:1px solid #c9ccd1;margin-top:8px;font-size:15px}.secondary:hover{border-color:var(--brand);color:var(--brand)}'
+        . '.support{font-size:14px;margin:24px 0 0;padding-top:16px;border-top:1px solid #eceef1}.support a{color:var(--brand);white-space:nowrap}'
         . 'footer{text-align:center;font-size:12px;color:var(--muted);margin-top:16px}'
         . '.spinner{width:28px;height:28px;border:3px solid #e3e5e8;border-top-color:var(--brand);border-radius:50%;animation:s 1s linear infinite;margin:8px auto 16px}'
         . '@keyframes s{to{transform:rotate(360deg)}}'
         . '.testmode{background:#fef7e0;color:#8a5a00;border:1px dashed #e0b84c;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;text-align:center;margin-bottom:16px}'
         . '</style>' . $extraHead . '</head><body><div class="wrap">'
-        . '<div class="brand">' . ($b['logo'] !== '' ? '<img src="' . h($b['logo']) . '" alt="">' : '') . '<span>' . h($b['name']) . '</span></div>'
+        // A wide logo (wordmark) already shows the name, so the text name is then kept for screen readers only.
+        . '<div class="brand' . ($b['logo'] !== '' ? ' wide' : '') . '" id="brand">'
+        . ($b['logo'] !== '' ? '<img src="' . h($b['logo']) . '" alt="" onload="if(this.naturalWidth<this.naturalHeight*1.6){document.getElementById(\'brand\').className=\'brand square\'}" onerror="this.remove();document.getElementById(\'brand\').className=\'brand\'">' : '')
+        . '<span>' . h($b['name']) . '</span></div>'
         . '<div class="card">'
         . (!empty($GLOBALS['gw_test_banner']) ? '<div class="testmode">TEST MODE — no real money will be charged</div>' : '');
 }
@@ -163,10 +170,10 @@ function gw_page_close(string $scripts = ''): void
         . '</div><footer>🔒 Payments secured by Razorpay</footer></div>' . $scripts . '</body></html>';
 }
 
-function fail_page(string $title, string $message, int $code = 400): never
+function fail_page(string $title, string $message, int $code = 400, string $actionsHtml = ''): never
 {
     gw_page_open($title, $code);
-    echo '<h1>' . h($title) . '</h1><p>' . h($message) . '</p>';
+    echo '<h1>' . h($title) . '</h1><p>' . h($message) . '</p>' . $actionsHtml;
     gw_page_close();
     exit;
 }
