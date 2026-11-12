@@ -15,6 +15,8 @@ $txn = $token !== '' ? $store->findByToken($token) : null;
 if (!$txn) {
     fail_page('Unknown transaction', 'We could not find this payment. If you were charged, please contact us and we will sort it out.', 404);
 }
+$txnMode = gw_txn_mode($txn);
+$GLOBALS['gw_test_banner'] = $txnMode === 'test';
 
 /** Post the final result to ResellerClub and mark it delivered. */
 $sendBack = function (array $txn, string $status) use ($rc, $store): never {
@@ -43,6 +45,13 @@ if (($_POST['action'] ?? '') === 'cancel') {
     // Lost the race to a successful payment — report the real state.
     $txn = $store->findByToken($token);
     $sendBack($txn, $txn['status'] === 'paid' ? ResellerClub::STATUS_SUCCESS : ResellerClub::STATUS_FAILED);
+}
+
+try {
+    $razorpay = gw_razorpay($txnMode);
+} catch (Throwable $e) {
+    gw_log('Missing keys for transaction mode', ['transid' => $txn['rc_transid'], 'mode' => $txnMode]);
+    fail_page('Payment not confirmed', 'We could not confirm this payment right now. If you were charged, please contact us and quote reference #' . $txn['rc_transid'] . '.', 503);
 }
 
 $paymentId = (string) ($_POST['razorpay_payment_id'] ?? '');

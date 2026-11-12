@@ -19,10 +19,9 @@ if (!is_file(GW_CONFIG_FILE)) {
         503
     );
 }
-$config = require GW_CONFIG_FILE;
+$config = gw_normalize_config(require GW_CONFIG_FILE);
 
 gw_protect_dir($config['data_dir']);
 
 $store = new Store($config['data_dir'] . '/transactions.sqlite');
 $rc = new ResellerClub($config['rc_key']);
-$razorpay = new Razorpay($config['razorpay_key_id'], $config['razorpay_key_secret']);

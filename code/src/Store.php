@@ -34,6 +34,11 @@ final class Store
             updated_at          TEXT NOT NULL
         )");
         $this->db->exec('CREATE INDEX IF NOT EXISTS idx_rc_transid ON transactions (rc_transid)');
+        // Added later: which key set (test/live) created the transaction.
+        $cols = array_column($this->db->query('PRAGMA table_info(transactions)')->fetchAll(), 'name');
+        if (!in_array('mode', $cols, true)) {
+            $this->db->exec('ALTER TABLE transactions ADD COLUMN mode TEXT');
+        }
     }
 
     public function create(array $row): void

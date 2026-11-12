@@ -98,9 +98,11 @@ function gw_page_open(string $title, int $code = 200, string $extraHead = ''): v
         . 'footer{text-align:center;font-size:12px;color:var(--muted);margin-top:16px}'
         . '.spinner{width:28px;height:28px;border:3px solid #e3e5e8;border-top-color:var(--brand);border-radius:50%;animation:s 1s linear infinite;margin:8px auto 16px}'
         . '@keyframes s{to{transform:rotate(360deg)}}'
+        . '.testmode{background:#fef7e0;color:#8a5a00;border:1px dashed #e0b84c;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;text-align:center;margin-bottom:16px}'
         . '</style>' . $extraHead . '</head><body><div class="wrap">'
         . '<div class="brand">' . ($b['logo'] !== '' ? '<img src="' . h($b['logo']) . '" alt="">' : '') . '<span>' . h($b['name']) . '</span></div>'
-        . '<div class="card">';
+        . '<div class="card">'
+        . (!empty($GLOBALS['gw_test_banner']) ? '<div class="testmode">TEST MODE — no real money will be charged</div>' : '');
 }
 
 function gw_page_close(string $scripts = ''): void
@@ -116,6 +118,57 @@ function fail_page(string $title, string $message, int $code = 400): never
     echo '<h1>' . h($title) . '</h1><p>' . h($message) . '</p>';
     gw_page_close();
     exit;
+}
+
+/**
+ * Fill in mode/key settings. Older configs with a single razorpay_key_id/secret
+ * keep working: the key prefix decides whether they are test or live keys.
+ */
+function gw_normalize_config(array $c): array
+{
+    if (!empty($c['razorpay_key_id']) && empty($c['razorpay_live_key_id']) && empty($c['razorpay_test_key_id'])) {
+        $kind = str_starts_with((string) $c['razorpay_key_id'], 'rzp_test_') ? 'test' : 'live';
+        $c["razorpay_{$kind}_key_id"] = $c['razorpay_key_id'];
+        $c["razorpay_{$kind}_key_secret"] = $c['razorpay_key_secret'] ?? '';
+        $c['mode'] = $c['mode'] ?? $kind;
+    }
+    $c += [
+        'mode' => 'live',
+        'razorpay_live_key_id' => '', 'razorpay_live_key_secret' => '',
+        'razorpay_test_key_id' => '', 'razorpay_test_key_secret' => '',
+        'test_customer_ids' => [],
+    ];
+    $c['mode'] = $c['mode'] === 'test' ? 'test' : 'live';
+    $c['test_customer_ids'] = array_values(array_filter(array_map('strval', (array) $c['test_customer_ids']), 'strlen'));
+    return $c;
+}
+
+/** Key pair for a mode, or null when missing or of the wrong kind (rzp_test_ vs rzp_live_). */
+function gw_mode_keys(string $mode): ?array
+{
+    $c = $GLOBALS['config'];
+    $id = (string) ($c["razorpay_{$mode}_key_id"] ?? '');
+    $secret = (string) ($c["razorpay_{$mode}_key_secret"] ?? '');
+    if ($id === '' || $secret === '' || !str_starts_with($id, "rzp_{$mode}_")) {
+        return null;
+    }
+    return [$id, $secret];
+}
+
+/** Razorpay client for a mode; throws if that mode has no usable keys. */
+function gw_razorpay(string $mode): Razorpay
+{
+    $keys = gw_mode_keys($mode);
+    if (!$keys) {
+        throw new RuntimeException("No Razorpay {$mode} keys configured");
+    }
+    return new Razorpay($keys[0], $keys[1]);
+}
+
+/** Mode a stored transaction was created in (rows from before modes existed use the config mode). */
+function gw_txn_mode(array $txn): string
+{
+    return in_array($txn['mode'] ?? null, ['test', 'live'], true) ? $txn['mode'] : $GLOBALS['config']['mode'];
 }
 
 /**

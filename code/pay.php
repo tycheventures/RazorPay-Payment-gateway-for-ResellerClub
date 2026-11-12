@@ -42,9 +42,24 @@ if (!is_numeric($p['sellingcurrencyamount']) || (float) $p['sellingcurrencyamoun
 $amountMinor = (int) round((float) $p['sellingcurrencyamount'] * 100);
 $currency = $config['currency'];
 
+// Which Razorpay keys to use. In sandbox (test) mode only listed ResellerClub customers may pay,
+// so nobody else can "pay" with public test cards against the live ResellerClub account.
+$mode = $config['mode'];
+if ($mode === 'test' && !in_array((string) $p['userid'], $config['test_customer_ids'], true)) {
+    gw_log('Sandbox: customer not on test list', ['transid' => $p['transid'], 'userid' => $p['userid']]);
+    fail_page('Payment temporarily unavailable', 'Online payment is temporarily unavailable. Please try again later or contact us to pay another way.', 503);
+}
+try {
+    $razorpay = gw_razorpay($mode);
+} catch (Throwable $e) {
+    gw_log('Missing keys for mode', ['transid' => $p['transid'], 'mode' => $mode]);
+    fail_page('Payment temporarily unavailable', 'Online payment is temporarily unavailable. Please try again later or contact us to pay another way.', 503);
+}
+$GLOBALS['gw_test_banner'] = $mode === 'test';
+
 // Reuse an open attempt for the same transaction (page reloads, back button).
 $txn = $store->findOpenByTransId($p['transid']);
-if ($txn && ((int) $txn['amount_minor'] !== $amountMinor || $txn['redirect_url'] !== $p['redirecturl'])) {
+if ($txn && ((int) $txn['amount_minor'] !== $amountMinor || $txn['redirect_url'] !== $p['redirecturl'] || gw_txn_mode($txn) !== $mode)) {
     $txn = null;
 }
 
@@ -75,8 +90,9 @@ if (!$txn) {
         'amount_minor'       => $amountMinor,
         'currency'           => $currency,
         'razorpay_order_id'  => $order['id'],
+        'mode'               => $mode,
     ]);
-    gw_log('Order created', ['transid' => $p['transid'], 'order' => $order['id'], 'amount' => $amountMinor]);
+    gw_log('Order created', ['transid' => $p['transid'], 'order' => $order['id'], 'amount' => $amountMinor, 'mode' => $mode]);
     $txn = $store->findByToken($token);
 }
 

@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$errors) {
             try {
                 $setup->writeConfig($config);
-                gw_log('Setup completed', ['mode' => str_starts_with($config['razorpay_key_id'], 'rzp_live_') ? 'live' : 'test']);
+                gw_log('Setup completed', ['mode' => $config['mode']]);
                 $done = $config;
             } catch (Throwable $e) {
                 $errors['_form'] = 'Could not save config.php: ' . $e->getMessage();
@@ -98,7 +98,7 @@ $field = function (string $name, string $label, string $help = '', string $type 
         ? '<textarea id="' . $id . '" name="' . $name . '" rows="3"' . $attr . '>' . h($values[$name] ?? '') . '</textarea>'
         : '<input id="' . $id . '" name="' . $name . '" type="' . $type . '" value="' . h($values[$name] ?? '') . '"' . $attr . '>';
     return '<div class="field' . (isset($errors[$name]) ? ' has-error' : '') . '">'
-        . '<label for="' . $id . '">' . h($label) . (isset($attrs['required']) ? ' <span class="req" aria-hidden="true">*</span>' : '') . '</label>' . $input
+        . '<label for="' . $id . '">' . h($label) . (isset($attrs['required']) || isset($attrs['data-req']) ? ' <span class="req" aria-hidden="true"' . (isset($attrs['required']) ? '' : ' style="display:none"') . '>*</span>' : '') . '</label>' . $input
         . (isset($errors[$name]) ? '<div class="error">' . h($errors[$name]) . '</div>' : '')
         . ($help !== '' ? '<div class="help">' . $help . '</div>' : '')
         . '</div>';
@@ -131,6 +131,7 @@ $field = function (string $name, string $label, string $help = '', string $type 
   button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:12px 18px;font-size:16px;cursor:pointer;width:100%}
   .copy{display:flex;gap:8px;align-items:center;margin:6px 0 14px} .copy input{font-family:ui-monospace,monospace;font-size:13px}
   .copy button{width:auto;padding:9px 12px;font-size:14px}
+  .check label{display:flex;gap:8px;align-items:center;font-weight:600} .check input{width:auto}
   ol.steps{margin:0 0 16px;padding-left:20px;font-size:14px} ol.steps li{margin-bottom:8px} ol.steps .copy{margin:6px 0 0}
   .row{display:grid;grid-template-columns:1fr 1fr;gap:12px} @media(max-width:560px){.row{grid-template-columns:1fr}}
 </style>
@@ -142,7 +143,12 @@ $field = function (string $name, string $label, string $help = '', string $type 
   <div class="card">
     <h1>Setup complete</h1>
     <p class="muted">config.php has been saved and this wizard is now locked. Mode:
-      <strong><?= str_starts_with($done['razorpay_key_id'], 'rzp_live_') ? 'LIVE' : 'TEST' ?></strong>.</p>
+      <strong><?= $done['mode'] === 'test' ? 'SANDBOX (TEST)' : 'LIVE' ?></strong>.</p>
+    <?php if ($done['mode'] === 'test'): ?>
+      <div class="banner warn">Sandbox mode: payments use your Razorpay test keys and no real money moves.
+        <?= $done['test_customer_ids'] ? 'Only these ResellerClub customer IDs can pay: ' . h(implode(', ', $done['test_customer_ids'])) . '.' : 'No test customer IDs are set, so only ResellerClub\'s own test buttons can pay.' ?>
+        Everyone else sees "temporarily unavailable". To go live, add your live keys to config.php and set <code>'mode' => 'live'</code>.</div>
+    <?php endif; ?>
     <div class="banner <?= $exposed === true ? 'ok' : ($exposed === false ? 'bad' : 'warn') ?>"><?= h($exposureMsg) ?></div>
     <?php if (!$done['allowed_redirect_hosts']): ?>
       <div class="banner warn">No allowed return hosts set, so any return address is accepted. Add your storefront hostnames to config.php when you can.</div>
@@ -160,7 +166,7 @@ $field = function (string $name, string $label, string $help = '', string $type 
     <div class="copy"><input readonly value="<?= h($done['base_url']) ?>/webhook.php"><button type="button" onclick="cp(this)">Copy</button></div>
     <label>Secret</label>
     <div class="copy"><input readonly value="<?= h($done['razorpay_webhook_secret']) ?>"><button type="button" onclick="cp(this)">Copy</button></div>
-    <p class="muted">Active events: <code>payment.captured</code> and <code>order.paid</code>. The secret is also stored in config.php.</p>
+    <p class="muted">Active events: <code>payment.captured</code> and <code>order.paid</code>. Razorpay keeps separate webhooks for Test mode and Live mode: add this same URL and secret in each mode you use. The secret is also stored in config.php.</p>
   </div>
   <div class="card">
     <h2>3. Test</h2>
@@ -209,8 +215,21 @@ $field = function (string $name, string $label, string $help = '', string $type 
 
     <div class="card">
       <h2>Razorpay</h2>
-      <?= $field('razorpay_key_id', 'Key ID', 'Razorpay Dashboard → Account &amp; Settings → API Keys. Start with <code>rzp_test_</code> keys.', 'text', ['placeholder' => 'rzp_test_…', 'spellcheck' => 'false', 'required' => 'required', 'pattern' => 'rzp_(test|live)_[A-Za-z0-9]+', 'title' => 'Starts with rzp_test_ or rzp_live_']) ?>
-      <?= $field('razorpay_key_secret', 'Key secret', 'Checked against Razorpay before saving.', 'password', ['required' => 'required']) ?>
+      <p class="muted">Razorpay Dashboard → Account &amp; Settings → API Keys. Each key pair is checked with Razorpay before saving.</p>
+      <?php $sandboxOn = in_array($values['sandbox'] ?? '', ['1', 'on'], true); ?>
+      <div id="live-keys">
+        <?= $field('razorpay_live_key_id', 'Live key ID', 'Generated in <strong>Live mode</strong>. Optional in sandbox mode: you can add it to config.php later.', 'text', ['placeholder' => 'rzp_live_…', 'spellcheck' => 'false', 'pattern' => 'rzp_live_[A-Za-z0-9]+', 'title' => 'Starts with rzp_live_', 'data-req' => '1'] + ($sandboxOn ? [] : ['required' => 'required'])) ?>
+        <?= $field('razorpay_live_key_secret', 'Live key secret', '', 'password', ['data-req' => '1'] + ($sandboxOn ? [] : ['required' => 'required'])) ?>
+      </div>
+      <div class="field check">
+        <label><input type="checkbox" name="sandbox" value="1" id="f_sandbox"<?= $sandboxOn ? ' checked' : '' ?>> Sandbox mode (test without real money)</label>
+        <div class="help">Uses your Razorpay <strong>test</strong> keys, and only the ResellerClub customer IDs you list can pay. Everyone else sees "temporarily unavailable", so nobody can get a free order with public test cards.</div>
+      </div>
+      <div id="sandbox-fields"<?= $sandboxOn ? '' : ' hidden' ?>>
+        <?= $field('razorpay_test_key_id', 'Test key ID', 'Generated in <strong>Test mode</strong>.', 'text', ['placeholder' => 'rzp_test_…', 'spellcheck' => 'false', 'pattern' => 'rzp_test_[A-Za-z0-9]+', 'title' => 'Starts with rzp_test_', 'data-req' => '1'] + ($sandboxOn ? ['required' => 'required'] : [])) ?>
+        <?= $field('razorpay_test_key_secret', 'Test key secret', '', 'password', ['data-req' => '1'] + ($sandboxOn ? ['required' => 'required'] : [])) ?>
+        <?= $field('test_customer_ids', 'Test customer IDs', 'ResellerClub customer IDs allowed to pay while in sandbox mode, separated by commas, e.g. <code>490208</code>. Find them in ResellerClub under Customers.', 'text', ['placeholder' => '490208, 123456', 'pattern' => '[0-9, ]*', 'title' => 'Digits separated by commas']) ?>
+      </div>
       <?= $field('razorpay_webhook_secret', 'Webhook secret', 'Leave blank to generate one. You\'ll paste it into Razorpay on the next screen.', 'password', ['minlength' => '12', 'title' => 'At least 12 characters, or leave blank']) ?>
       <div class="row">
         <?= $field('currency', 'Currency', 'Must match your ResellerClub selling currency.', 'text', ['maxlength' => '3', 'required' => 'required', 'pattern' => '[A-Za-z]{3}', 'title' => '3-letter code, e.g. INR']) ?>
@@ -244,6 +263,17 @@ $field = function (string $name, string $label, string $help = '', string $type 
     var base=document.getElementById('f_base_url'), gw=document.getElementById('gw-url');
     if(!base||!gw)return;
     base.addEventListener('input',function(){gw.value=base.value.trim().replace(/\/+$/,'')+'/pay.php'});
+  })();
+  (function(){
+    var box=document.getElementById('f_sandbox'), sb=document.getElementById('sandbox-fields');
+    if(!box||!sb)return;
+    function sync(){
+      var on=box.checked; sb.hidden=!on;
+      function req(id,v){var el=document.getElementById(id); el.required=v; var star=el.parentNode.querySelector('label .req'); if(star)star.style.display=v?'':'none';}
+      req('f_razorpay_test_key_id',on); req('f_razorpay_test_key_secret',on);
+      req('f_razorpay_live_key_id',!on); req('f_razorpay_live_key_secret',!on);
+    }
+    box.addEventListener('change',sync); sync();
   })();
 </script>
 </body>

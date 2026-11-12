@@ -8,12 +8,24 @@ return [
     // "Add Custom Payment Gateway". The "Key" shown there goes here.
     'rc_key' => 'YOUR_RESELLERCLUB_GATEWAY_KEY',
 
-    // Razorpay: Dashboard → Account & Settings → API Keys.
-    // Use rzp_test_... keys until you've tested end to end.
-    'razorpay_key_id'     => 'rzp_test_XXXXXXXXXXXXXX',
-    'razorpay_key_secret' => 'XXXXXXXXXXXXXXXXXXXXXXXX',
+    // 'live' charges real money with the live keys.
+    // 'test' (sandbox) uses the test keys, and only test_customer_ids can pay;
+    // everyone else sees "temporarily unavailable".
+    'mode' => 'test',
+
+    // Razorpay: Dashboard → Account & Settings → API Keys (generate in Live mode and in Test mode).
+    'razorpay_live_key_id'     => '', // rzp_live_...
+    'razorpay_live_key_secret' => '',
+    'razorpay_test_key_id'     => 'rzp_test_XXXXXXXXXXXXXX',
+    'razorpay_test_key_secret' => 'XXXXXXXXXXXXXXXXXXXXXXXX',
+
+    // ResellerClub customer IDs allowed to pay while 'mode' is 'test'.
+    'test_customer_ids' => [
+        // '490208',
+    ],
 
     // Razorpay: Dashboard → Webhooks → secret you set for this gateway's webhook URL.
+    // Test mode and Live mode have separate webhooks: use the same URL and secret in both.
     'razorpay_webhook_secret' => 'CHANGE_ME',
 
     // Currency your ResellerClub "selling currency" is in. Razorpay charges in this currency.
