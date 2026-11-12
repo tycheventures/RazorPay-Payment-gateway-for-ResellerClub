@@ -19,9 +19,9 @@ return [
     'razorpay_test_key_id'     => 'rzp_test_XXXXXXXXXXXXXX',
     'razorpay_test_key_secret' => 'XXXXXXXXXXXXXXXXXXXXXXXX',
 
-    // ResellerClub customer IDs allowed to pay while 'mode' is 'test'.
+    // ResellerClub customer or sub-reseller IDs allowed to pay while 'mode' is 'test'.
     'test_customer_ids' => [
-        // '490208',
+        // '123456',
     ],
 
     // Razorpay: Dashboard → Webhooks → secret you set for this gateway's webhook URL.

@@ -124,7 +124,7 @@ final class Setup
         $customerIds = array_values(array_unique(array_filter(preg_split('/[\s,]+/', $v['test_customer_ids']), 'strlen')));
         foreach ($customerIds as $id) {
             if (!preg_match('/^[0-9]{1,15}$/', $id)) {
-                $e['test_customer_ids'] = "“{$id}” is not a ResellerClub customer ID (digits only).";
+                $e['test_customer_ids'] = "“{$id}” is not a ResellerClub customer or sub-reseller ID (digits only).";
                 break;
             }
         }
