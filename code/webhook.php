@@ -32,8 +32,8 @@ if (in_array($type, ['payment.captured', 'order.paid'], true) && $payment && !em
     $txn = $store->findByOrderId($payment['order_id']);
     if (!$txn) {
         gw_log('Webhook for unknown order', ['order' => $payment['order_id']]);
-    } elseif ((int) $payment['amount'] !== (int) $txn['amount_minor']) {
-        gw_log('Webhook amount mismatch', ['transid' => $txn['rc_transid'], 'order' => $payment['order_id']]);
+    } elseif (!gw_payment_amount_matches($payment, (int) $txn['amount_minor'])) {
+        gw_log('Webhook amount mismatch', ['transid' => $txn['rc_transid'], 'order' => $payment['order_id'], 'expected' => (int) $txn['amount_minor'], 'amount' => $payment['amount'] ?? null, 'fee' => $payment['fee'] ?? null]);
     } elseif ($payment['status'] === 'captured') {
         // created → paid, or failed → paid if the customer hit Cancel after paying.
         if ($store->transition($txn['token'], 'created', 'paid', ['razorpay_payment_id' => $payment['id']])

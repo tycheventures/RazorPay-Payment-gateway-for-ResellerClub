@@ -135,4 +135,5 @@ openssl s_client -starttls ftp -connect ftp.yourdomain.com:21 </dev/null 2>/dev/
 
 - Amounts are charged in `currency` (default `INR`) using ResellerClub's `sellingcurrencyamount`. Set your ResellerClub selling currency to match.
 - Payments are auto-captured (`payment_capture: 1`). The callback also captures any payment that is still only authorized.
+- If your Razorpay account passes its fee to the customer (customer fee bearer / convenience fee), the customer is charged the invoice amount plus Razorpay's fee. The gateway accepts that, using the `fee` Razorpay reports. You're settled the invoice amount, and ResellerClub is told the invoice amount.
 - Logs: `code/data/gateway.log`.
