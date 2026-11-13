@@ -197,16 +197,52 @@ The file is blocked from the web and rotates at 5 MB. The shorter `data/gateway.
 
 ### Reconciliation
 
-ResellerClub sends no acknowledgement, so the gateway can't be sure it received a result. List paid **live** payments that may need attention:
+ResellerClub never confirms back to the gateway. The gateway can tell whether the customer **reached the "Payment received → returning to store" page**, but not whether ResellerClub actually recorded the payment. The reconciliation report lists paid **live** payments that may need a look. Test-mode payments are never listed.
+
+On the server, the script is in the folder you uploaded (not `code/`). With the example layout from the Quick start:
 
 ```bash
-php code/bin/unreconciled.php
+/usr/local/bin/php /home/USER/public_html/razorpay/bin/unreconciled.php
 ```
 
-- **ACTION NEEDED:** paid, but the customer never reached the result page (e.g. closed the tab). Mark these paid in ResellerClub.
-- **CHECK:** the result page was shown, but receipt isn't confirmed. Spot-check these in ResellerClub.
+Replace `/home/USER/public_html/razorpay` with your gateway folder's real path. Running `pwd` inside it over SSH shows it.
 
-Once you've checked one, record it with `php code/bin/unreconciled.php --confirm <transid>`. The script exits with code 1 when anything needs action, so it can run from cron and email you. Test-mode payments are never listed.
+**Reading the report**
+
+| Section | What it means | What to do |
+|---|---|---|
+| **ACTION NEEDED** | The money was captured, but the customer **never** reached the result page (closed the tab, lost connection). ResellerClub doesn't know about the payment. | Add the payment in ResellerClub by hand, e.g. mark the invoice paid or add the funds, then confirm it (below). |
+| **CHECK** | The result page **was** shown, so ResellerClub almost certainly recorded it. It's only listed because nobody has confirmed it. | Optionally check it in ResellerClub, then confirm it so it stops appearing. |
+
+Each row shows the date, the ResellerClub transaction ID, the amount, and the Razorpay order and payment IDs, so you can find the payment in both dashboards.
+
+**Confirming a transaction** once you've checked it in ResellerClub:
+
+```bash
+/usr/local/bin/php /home/USER/public_html/razorpay/bin/unreconciled.php --confirm <transid>
+```
+
+It prints `Marked 1 paid payment(s) … as confirmed`. Running it twice is harmless.
+
+The script exits with code **1** when something is under ACTION NEEDED, and **0** otherwise (including when only CHECK rows exist).
+
+#### Daily check by cron (recommended once you take live payments)
+
+1. **Find the right PHP.** Cron runs with a minimal environment, so always use the full path to a PHP 8.1+ binary rather than plain `php`. Over SSH, check:
+   ```bash
+   /usr/local/bin/php -v
+   ```
+   If that's missing or older than 8.1, cPanel servers usually also have `/opt/cpanel/ea-php81/root/usr/bin/php` (or `ea-php82`, `ea-php83`).
+2. **Use a command that's silent unless something needs action.** cPanel emails *any* output a cron job prints. This prints, and therefore emails, only when there are ACTION NEEDED payments:
+   ```bash
+   out=$(/usr/local/bin/php /home/USER/public_html/razorpay/bin/unreconciled.php) || echo "$out"
+   ```
+   Run it once over SSH first. No output means all is well.
+3. **Add it in cPanel → Cron Jobs:**
+   - **Cron Email** (top of the page): the address that should receive alerts. Click *Update Email*. If it's left empty, cPanel uses the account's contact email.
+   - **Add New Cron Job:** *Common Settings* → *Once Per Day* (or minute `0`, hour `9`), with the command from step 2.
+
+**What you'll get:** no email on normal days. When a customer pays and doesn't make it back to ResellerClub, you get an email listing that payment the next morning. CHECK rows never trigger an email: run the report by hand now and then (e.g. weekly) to spot-check and confirm them.
 
 ## Security
 
@@ -290,7 +326,7 @@ PHP_CLI_SERVER_WORKERS=4 php -S 127.0.0.1:8099 -t code
 | `code/src/ResellerClub.php` | ResellerClub checksum and response protocol |
 | `code/src/Store.php` | SQLite transaction store |
 | `code/src/helpers.php` | Layout, branding, logging, mode and host rules |
-| `code/bin/unreconciled.php` | Lists paid-but-not-returned payments |
+| `code/bin/unreconciled.php` | Reconciliation report and `--confirm` (see [Reconciliation](#reconciliation)) |
 | `code/data/` | Database and logs, created on first run (web-blocked, git-ignored) |
 
 ## License
